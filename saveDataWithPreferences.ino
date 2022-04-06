@@ -1,15 +1,17 @@
 /*
  ESP32 startup counter example with Preferences library.
+
  This simple example demonstrates using the Preferences library to store how many times the ESP32 module has booted. 
  The Preferences library is a wrapper around the Non-volatile storage on ESP32 processor.
+
  created for arduino-esp32 09 Feb 2017 by Martin Sloup (Arcao)
  
  Complete project details at https://RandomNerdTutorials.com/esp32-save-data-permanently-preferences/
 */
+#include <sys/time.h>
 
 // yyyymmddhhmmssF
-#include <ESP32Time.h>
-#include <TimeLib.h>
+//#include <TimeLib.h>
 #include <Preferences.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
@@ -18,18 +20,13 @@
 
 #define Threshold 40
 #define MAX_CHARS 15
-#define x_sensor_pin 25  //D2
-#define nx_sensor_pin 14 //D6
-#define y_sensor_pin 26  //D3
-#define ny_sensor_pin 13 //D7
-#define z_sensor_pin 0   //D5
-#define nz_sensor_pin 2  //D9
+
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b" // Currently using
 #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8" // still in use but need to switch
+
 #define dateCharacteristicUUID  "c84b5feb-a12f-45bb-a3ff-a6adce24f69e"
 
 Preferences preferences;
-ESP32Time rtc;
 
 BLECharacteristic dateCharacteristics("c84b5feb-a12f-45bb-a3ff-a6adce24f69e",BLECharacteristic::PROPERTY_NOTIFY);
 BLEDescriptor dateDescriptor(BLEUUID((uint16_t)0x2902));
@@ -38,50 +35,36 @@ String timeDifference = "timeDifference";
 String baseNameDataSpace = "dtStorage";
 String tempStartData = "";
 String tempEndData = "";
-
-volatile int Interupt_Counter = 0;
-volatile int interruptCounter;
-int totalInterruptCounter;
 int count = 1;
-int minutes;
-int timeActive;
-int x_lastState = 0;
-int y_lastState = 0;
-int z_lastState = 0;
-int nx_lastState = 0;
-int ny_lastState = 0;
-int nz_lastState = 0;
-uint32_t timePlayed = 0;
-uint32_t BUTTON_PIN_BITMASK = 0x2000; //2^0 + 2^13 + 2^14 in Hex
-uint8_t sensor = 0;
-uint8_t x_tilt = 0;
-uint8_t y_tilt = 0;
-uint8_t z_tilt = 0;
-uint8_t nx_tilt = 0;
-uint8_t ny_tilt = 0;
-uint8_t nz_tilt = 0;
 
-String translate = "";
-double dateValue;
-
-RTC_DATA_ATTR bool first_use = true;
-
-bool oldDeviceConnected = false;
-bool AllSensorsChecked = 0;
-bool SensorChanged = 0;
-bool deviceConnected = false;
-bool DetectMotionAndSound = 0;
 bool isTouched = false;
 bool isStorageFull = false; // most liekly set a limit of 5 start/end saves
 bool isReadySendData = false;
 bool isClearingData = false;
 
+volatile int interruptCounter;
+int totalInterruptCounter;
+int minutes;
+int timeActive;
+
+String translate = "";
+double dateValue;
+
+bool deviceConnected = false;
+bool oldDeviceConnected = false;
+
+RTC_DATA_ATTR bool isDeviceSettedUp = false;
+
 touch_pad_t touchPin;
-
 hw_timer_t * timer = NULL;
-hw_timer_t* SleepTimer = NULL;
-
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+
+struct tm getTimeStruct()
+{
+  struct tm timeinfo;
+  getLocalTime(&timeinfo, 0);
+  return timeinfo;
+}
 
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
@@ -100,76 +83,6 @@ void IRAM_ATTR onTimer() {
   portEXIT_CRITICAL_ISR(&timerMux);
 }
 
-  
-
-void IRAM_ATTR onDeepSleepTimer() {
-  Interupt_Counter++;
-  Serial.println(String(Interupt_Counter));
-  if (Interupt_Counter >= 20) {
-      Serial.println("start deep sleep");
-      esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK,ESP_EXT1_WAKEUP_ANY_HIGH);
-      esp_bt_controller_disable();
-      esp_deep_sleep_start();
-  }
-}
-
-void SensorCheck() {
-  AllSensorsChecked = 0;
-  SensorChanged = 0;
-  do {
-    if (x_tilt != x_lastState){
-      x_lastState = x_tilt;
-      SensorChanged = 1;
-    }else if(y_tilt != y_lastState){
-      y_lastState = y_tilt;
-      SensorChanged = 1;
-    }else if(z_tilt != z_lastState){
-      z_lastState = z_tilt;
-      SensorChanged = 1;
-    }else if(nx_tilt != nx_lastState){
-      nx_lastState = nx_tilt;
-      SensorChanged = 1;
-    }else if(ny_tilt != ny_lastState){
-      ny_lastState = ny_tilt;
-      SensorChanged = 1;
-    }else if(nz_tilt != nz_lastState){
-      nz_lastState = nz_tilt;
-      SensorChanged = 1;
-    }else {
-      AllSensorsChecked = 1;
-    }
-  }while (AllSensorsChecked == 0);
-
-  if(SensorChanged){
-    WakeupChange();
-  }
-}
-
-void WakeupChange() { // initlize all wakeup sensors
-  BUTTON_PIN_BITMASK = 0x0;
-  if (!x_lastState) {
-    BUTTON_PIN_BITMASK += pow(2,x_sensor_pin);
-  }
-  if (!y_lastState) {
-    BUTTON_PIN_BITMASK += pow(2,y_sensor_pin);
-  }
-  if (!z_lastState) {
-    BUTTON_PIN_BITMASK += pow(2,z_sensor_pin);
-  }
-  if (!nx_lastState) {
-    BUTTON_PIN_BITMASK += pow(2,nx_sensor_pin);
-  }
-  if (!ny_lastState) {
-    BUTTON_PIN_BITMASK += pow(2,ny_sensor_pin);
-  }
-  if (!nz_lastState) {
-    BUTTON_PIN_BITMASK += pow(2,nz_sensor_pin);
-  }
-  if (BUTTON_PIN_BITMASK == 0x0){
-    BUTTON_PIN_BITMASK += pow(2,nz_sensor_pin);
-  }
-  esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK,ESP_EXT1_WAKEUP_ANY_HIGH);
-}
 
 void callback(){
 }
@@ -177,40 +90,59 @@ void callback(){
 #define startTime // need to make this a continuous loop
 #define bleServerName "Strings attached"
 
-String GetCurrentTimeStamp(){
+
+String GetCurrentTMStamp(int yearTM, int monthTM, int dayTM, 
+ int hourTM, int minTM, int secTM){
+  String fYear = "";
   String fMonth = "";
   String fDay = "";
   String fHr = "";
   String fMin = "";
   String fSec = "";
-           
-  if(month() < 10 ){
-    fMonth = "0" + String(month());
+
+  yearTM += 1900;
+  monthTM += 1;
+  minTM -= 18;
+  Serial.println("Year " + String(yearTM));
+  Serial.println("Month " + String(monthTM));
+  Serial.println("Day " + String(dayTM));
+  Serial.println("Hour " + String(hourTM));
+  Serial.println("Min " + String(minTM));
+  Serial.println("Sec " + String(secTM));
+  //monthTM += 1;
+  fYear = String(yearTM);
+  if(monthTM < 10 ){
+    fMonth = "0" + String(monthTM);
   } else {
-    fMonth = String(month());
+    fMonth = String(monthTM);
   }
-  if(day() < 10){
-    fDay = "0" + String(day());
+  if(dayTM < 10){
+    fDay = "0" + String(dayTM);
   } else{
-    fDay = String(day());  
+    fDay = String(dayTM);  
   }
-  if(hour() < 10){
-    fHr = "0" + String(hour());
+  if(hourTM < 10){
+    fHr = "0" + String(hourTM);
   } else{
-    fHr = String(hour());  
+    fHr = String(hourTM);  
   }
-  if(minute() < 10){
-    fMin = "0" + String(minute());
+  if(minTM < 10){
+    fMin = "0" + String(minTM);
   } else{
-    fMin = String(minute());  
+    fMin = String(minTM);  
   }
-  if(second() < 10){
-    fSec = "0" + String(second());
+  if(secTM < 10){
+    fSec = "0" + String(secTM);
   } else{
-    fSec = String(second());  
+    fSec = String(secTM);  
   }
-  return String(year()) + fMonth + fDay + fHr + fMin + fSec;
+  return fYear + fMonth + fDay + fHr + fMin + fSec;                           
 }
+
+
+
+
+
 
 void CalculateTimeElapsed(String tStart, String tEnd){
   // Getting variables
@@ -314,7 +246,7 @@ void CalculateTimeElapsed(String tStart, String tEnd){
   Serial.println("yay!");
 
   // FOR NOW
-  if(finES > 30){
+  if((finEH != 0) && (finEH % 100 == 0)){
     Serial.println("It's only been 30 seconds since you practiced. Keep going.");
     preferences.putInt("elapsedHour", 0);
     preferences.putInt("elapsedMin", 0);
@@ -326,25 +258,31 @@ void CalculateTimeElapsed(String tStart, String tEnd){
 
 void setup() {
   Serial.begin(115200);
+  delay(1000);
   Serial.println();
 
-  SleepTimer = timerBegin(0,80,true);
-  timerAttachInterrupt(SleepTimer, &onDeepSleepTimer, true);
-  timerAlarmWrite(SleepTimer,1000000,true);
- 
+  if (isDeviceSettedUp == false){
+      struct tm timeinfo = getTimeStruct();
+      timeinfo.tm_hour = 0;
+      timeinfo.tm_min = 0;
+      timeinfo.tm_sec = 0;
+      timeinfo.tm_mon = 0; // January -- need to add one
+      timeinfo.tm_mday = 1; // 1st
+      timeinfo.tm_year = 1970 - 1900; // 2021
+  
+      struct timeval tv;
+      tv.tv_sec = mktime(&timeinfo);
+      settimeofday(&tv, NULL);
+    }
+  isDeviceSettedUp = true;
+
   timer = timerBegin(0, 80, true);
   timerAttachInterrupt(timer, &onTimer, true);
   timerAlarmWrite(timer, 1000000, true);
   timerAlarmEnable(timer);
 
-  touchAttachInterrupt(T3, callback, Threshold);
+  // touchAttachInterrupt(T3, callback, Threshold);
   esp_sleep_enable_touchpad_wakeup();
-
-  // Remove all preferences under the opened namespace
-  // preferences.clear();
-
-  // Or remove the counter key only
-  //preferences.remove("counter");
 
   // Create BLE server name
   BLEDevice::init(bleServerName);
@@ -377,30 +315,6 @@ void setup() {
   
   BLEDevice::startAdvertising();
 
-// initialize sensors
-// -------------------------------------------
-    pinMode(25,INPUT);
-    pinMode(14,INPUT_PULLDOWN);
-    pinMode(26,INPUT);
-    pinMode(13,INPUT);
-    pinMode(0,INPUT_PULLDOWN);
-    pinMode(2, INPUT);
-    
-    x_tilt = !digitalRead(x_sensor_pin); // 0x00200000
-    y_tilt = !digitalRead(y_sensor_pin); // 0x00400000
-    z_tilt = !digitalRead(z_sensor_pin); // 0x0001
-    nx_tilt = digitalRead(nx_sensor_pin); // 0x4000
-    ny_tilt = digitalRead(ny_sensor_pin); // 0x2000
-    nz_tilt = digitalRead(nz_sensor_pin); // 0x0004  
-  
-    x_lastState = x_tilt;
-    y_lastState = y_tilt;
-    z_lastState = z_tilt;
-    nx_lastState = nx_tilt;
-    ny_lastState = ny_tilt;
-    nz_lastState = nz_tilt;
- // -------------------------------------------
- 
   for(int i = 1; i <= 10; i++){
         //
         String namingStorage = baseNameDataSpace + String(i); // mmddyyyyhhmmf
@@ -437,53 +351,52 @@ void setup() {
 }
 
 void loop() {
- 
-  x_tilt = !digitalRead(x_sensor_pin); // 0x00200000
-  y_tilt = !digitalRead(y_sensor_pin); // 0x00400000
-  z_tilt = !digitalRead(z_sensor_pin); // 0x0001
-  nx_tilt = digitalRead(nx_sensor_pin); // 0x4000
-  ny_tilt = digitalRead(ny_sensor_pin); // 0x2000
-  nz_tilt = digitalRead(nz_sensor_pin); // 0x0004   
-  SensorCheck();
- 
- 
-  if (deviceConnected) {
-    //Serial.println("Connected");
-    if(touchRead(T0) < 60){
+  struct tm timeinfo = getTimeStruct();
+  if(deviceConnected){
+    delay(250);
+    if(touchRead(T3) < 60){
+      Serial.println(touchRead(T0));
       if(!isTouched){
-          isTouched = true;
+        isTouched = true;
           
-          String namingStorage = baseNameDataSpace + String(count); // mmddyyyyhhmmf
-          int name_length = namingStorage.length() + 1;
-          char nameData[name_length];
-          namingStorage.toCharArray(nameData,name_length);
-          Serial.println(nameData);
+        String namingStorage = baseNameDataSpace + String(count); // mmddyyyyhhmmf
+        int name_length = namingStorage.length() + 1;
+        char nameData[name_length];
+        namingStorage.toCharArray(nameData,name_length);
+        Serial.println(nameData);
 
-          static char timestamp[20];
-          preferences.begin(nameData, false);
-          translate = GetCurrentTimeStamp();
-          dateValue = translate.toDouble();
+        static char timestamp[20];
+        preferences.begin(nameData, false);       
+
+          //translate = GetCurrentTimeStamp();
+        translate = GetCurrentTMStamp(timeinfo.tm_year, 
+                                          timeinfo.tm_mon, 
+                                          timeinfo.tm_mday, 
+                                          timeinfo.tm_hour,
+                                          timeinfo.tm_min,
+                                          timeinfo.tm_sec);
+        dateValue = translate.toDouble();
           
-          dtostrf(dateValue, 14, 0, timestamp);
-          tempStartData = timestamp;
-          
-          strcat(timestamp,"S");
-          Serial.print(timestamp);
-          Serial.println(". . . start");
+        dtostrf(dateValue, 14, 0, timestamp);
+        tempStartData = timestamp;
          
-          preferences.putString("date", timestamp);
-          preferences.end();
-
-          dateCharacteristics.setValue(timestamp);
-          dateCharacteristics.notify();
+        strcat(timestamp,"S");
+        Serial.print(timestamp);
+        Serial.println(". . . start");
         
-          count++;
-          if(count > 10){
-            isStorageFull = true;
-          }
+        preferences.putString("date", timestamp);
+        preferences.end();
+
+        dateCharacteristics.setValue(timestamp);
+        dateCharacteristics.notify();
+        
+        count++;
+        if(count > 10){
+          isStorageFull = true;
+        }
       }
     }
-    if(touchRead(T0) >= 66){
+    if(touchRead(T3) >= 66){
       if(isTouched){
         isTouched = false;
         
@@ -496,7 +409,13 @@ void loop() {
         preferences.begin(nameData, false);
         
         static char timestamp[20];
-        translate = GetCurrentTimeStamp();
+        // translate = GetCurrentTimeStamp(); 
+        translate = GetCurrentTMStamp(timeinfo.tm_year, 
+                                          timeinfo.tm_mon, 
+                                          timeinfo.tm_mday, 
+                                          timeinfo.tm_hour,
+                                          timeinfo.tm_min,
+                                          timeinfo.tm_sec);
         dateValue = translate.toDouble();
         dtostrf(dateValue, 14, 0, timestamp);
         tempEndData = timestamp;
@@ -522,6 +441,7 @@ void loop() {
        
       }   
     }
+    
     if(isStorageFull){
       Serial.println("Sorry, data is full. Restarting in 5 seconds..");
       for(int i = 1; i <= 10; i++){
