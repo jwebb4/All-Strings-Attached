@@ -20,14 +20,21 @@
 
 #define Threshold 40
 #define MAX_CHARS 15
+#define MAX_LOCAL_STORAGE 10
 
+
+// #define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8" // still in use but need to switch
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b" // Currently using
-#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8" // still in use but need to switch
-
 #define dateCharacteristicUUID  "c84b5feb-a12f-45bb-a3ff-a6adce24f69e"
+#define batteryCharacteristicUUID   "59d74fba-0f2b-4741-a057-d053662f2abe"
 
 Preferences preferences;
-
+/* Data stored in flash
+ *  timestamps
+ *  cumulativeElapsedTime
+ *  TBA current count
+ * 
+ */
 BLECharacteristic dateCharacteristics("c84b5feb-a12f-45bb-a3ff-a6adce24f69e",BLECharacteristic::PROPERTY_NOTIFY);
 BLEDescriptor dateDescriptor(BLEUUID((uint16_t)0x2902));
 
@@ -46,6 +53,8 @@ volatile int interruptCounter;
 int totalInterruptCounter;
 int minutes;
 int timeActive;
+
+int cumulativeHr;
 
 String translate = "";
 double dateValue;
@@ -139,12 +148,7 @@ String GetCurrentTMStamp(int yearTM, int monthTM, int dayTM,
   return fYear + fMonth + fDay + fHr + fMin + fSec;                           
 }
 
-
-
-
-
-
-void CalculateTimeElapsed(String tStart, String tEnd){
+int CalculateTimeElapsed(String tStart, String tEnd){
   // Getting variables
   String sYearStr = String(tStart.charAt(0)) + String(tStart.charAt(1)) + String(tStart.charAt(2)) + String(tStart.charAt(3));
   String sMonthStr = String(tStart.charAt(4)) + String(tStart.charAt(5));
@@ -192,23 +196,26 @@ void CalculateTimeElapsed(String tStart, String tEnd){
   int currentES = 0;
   int currentEM = 0;
   int currentEH = 0;
+  int carryMin = 0;
+  int carryHr = 0;
 
   // Determining current elapsed time
   if(eSec - sSec < 0){
-    currentES = abs(eSec - sSec);
+    currentES = 60 - (sSec - eSec);
+    carryMin = 1;
   } else{
     currentES = eSec - sSec;
   }
-  //Serial.println("currentES: " + String(currentES));
-  if(eMin - sMin < 0){
-    currentEM = abs(eMin - sMin);
+  if((eMin - sMin - carryMin )< 0){
+    currentEM = 60 - carryMin - (sMin - eMin);
+    carryHr = 1;
   } else{
-    currentEM = eMin - sMin;
+    currentEM = eMin - sMin - carryMin;
   }
-  if(eHr - sHr < 0){
-    currentEH = abs(eHr - sHr);
+  if((eHr - sHr - carryHr) < 0){
+    currentEH = 24 - carryHr - (sHr - eHr);
   } else{
-    currentEH = eHr - sHr;
+    currentEH = eHr - sHr - carryHr;
   }
 
   Serial.println("CurrEH: " + String(currentEH));
@@ -245,14 +252,7 @@ void CalculateTimeElapsed(String tStart, String tEnd){
   Serial.println("ElapsedTime: " + String(finEH) + String(finEM) + String(finES));
   Serial.println("yay!");
 
-  // FOR NOW
-  if((finEH != 0) && (finEH % 100 == 0)){
-    Serial.println("It's only been 30 seconds since you practiced. Keep going.");
-    preferences.putInt("elapsedHour", 0);
-    preferences.putInt("elapsedMin", 0);
-    preferences.putInt("elapsedSec", 0);
-  }
-  preferences.end();
+  return finEH;
   
 }
 
@@ -315,19 +315,13 @@ void setup() {
   
   BLEDevice::startAdvertising();
 
-  for(int i = 1; i <= 10; i++){
+  for(int i = 1; i <= MAX_LOCAL_STORAGE; i++){
         //
         String namingStorage = baseNameDataSpace + String(i); // mmddyyyyhhmmf
         int name_length = namingStorage.length() + 1;
         char nameData[name_length];
         namingStorage.toCharArray(nameData,name_length);
         Serial.println(nameData);
-
-        preferences.begin(nameData, false);
-        String stuffs = preferences.getString("date","nodate");
-        preferences.end();
-        //String stuffs = preferences.getString("date","nodate");
-        Serial.println(stuffs);
         
 // Clearing stuff for debug
         preferences.begin(nameData, false);
@@ -337,7 +331,6 @@ void setup() {
       }
 
 // Clearing stuff for debug
-
   int name_length = timeDifference.length() + 1;
   char timeDif[name_length];
   timeDifference.toCharArray(timeDif, name_length);
@@ -352,10 +345,9 @@ void setup() {
 
 void loop() {
   struct tm timeinfo = getTimeStruct();
-  if(deviceConnected){
+  if(deviceConnected && !isStorageFull){
     delay(250);
     if(touchRead(T3) < 60){
-      Serial.println(touchRead(T0));
       if(!isTouched){
         isTouched = true;
           
@@ -391,7 +383,7 @@ void loop() {
         dateCharacteristics.notify();
         
         count++;
-        if(count > 10){
+        if(count > MAX_LOCAL_STORAGE){
           isStorageFull = true;
         }
       }
@@ -431,11 +423,10 @@ void loop() {
         dateCharacteristics.setValue(timestamp);
         dateCharacteristics.notify();
 
+        cumulativeHr = CalculateTimeElapsed(tempStartData, tempEndData);
 
-        CalculateTimeElapsed(tempStartData, tempEndData);
-    
         count++;
-        if(count > 10){
+        if(count > MAX_LOCAL_STORAGE){
           isStorageFull = true;
         }
        
@@ -443,25 +434,19 @@ void loop() {
     }
     
     if(isStorageFull){
-      Serial.println("Sorry, data is full. Restarting in 5 seconds..");
-      for(int i = 1; i <= 10; i++){
-        //
-//        String namingStorage = baseNameDataSpace + String(i); // mmddyyyyhhmmf
-//        int name_length = namingStorage.length() + 1;
-//        char nameData[name_length];
-//        namingStorage.toCharArray(nameData,name_length);
-//        Serial.println(nameData);
+      Serial.println("Sorry, data is full. Connect to app to upload/clear entries.");
+      /*  UpdateLED
+       *  
+       */
+    }
 
-        //preferences.begin(nameData, false);
-        //String stuffs = preferences.getString("date","nodate");
-        //preferences.end();
-        //String stuffs = preferences.getString("date","nodate");
-        //Serial.println(stuffs);
-        
-      }
-      //ESP.restart();
-      delay(30000);
-    } 
+    if(cumulativeHr >= 100){
+      Serial.println("oops");
+      /* Update LED 
+       * Send notification to user
+       */
+    }
+    
   }
   if(!deviceConnected){
     if(isReadySendData){
@@ -489,7 +474,7 @@ void loop() {
       }
     }
     if(isClearingData){
-      for(int i = 1; i <= 10; i++){
+      for(int i = 1; i <= MAX_LOCAL_STORAGE; i++){
         String namingStorage = baseNameDataSpace + String(i);
         int name_length = namingStorage.length() + 1;
         char nameData[name_length];
@@ -504,5 +489,11 @@ void loop() {
       count = 1;    
     }
   }
+
+  
+  //CheckSensors();
+  //CheckStorage();
+  //CheckBattery();
+  //UpdateLEDs();
   
 }
