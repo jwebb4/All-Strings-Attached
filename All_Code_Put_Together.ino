@@ -49,13 +49,12 @@ int cumulativeHr;
 
 bool isTouched = false;
 bool isStorageFull = false; // most liekly set a limit of 5 start/end saves
-bool isReadySendData = false;
 bool isClearingData = false;
 
-volatile int Interupt_Counter = 0;
-volatile int interruptCounter;
 
-int totalInterruptCounter;
+
+
+
 int minutes;
 int timeActive;
 int x_lastState = 0;
@@ -75,6 +74,10 @@ uint8_t ny_tilt = 0;
 uint8_t nz_tilt = 0;
 
 String translate = "";
+static char timestamp[20];
+
+String currentETString = "";
+static char currentETCharArray[7]; // 6 + \n
 double dateValue;
 
 RTC_DATA_ATTR bool first_use = true;
@@ -86,11 +89,18 @@ bool AllSensorsChecked = 0;
 bool SensorChanged = 0;
 
 touch_pad_t touchPin;
-hw_timer_t * timer = NULL;
+
+volatile int Interupt_Counter = 0;
 hw_timer_t* SleepTimer = NULL;
-
-
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+
+volatile int LEDInterruptCounter;
+int totalLEDInterruptCounter;
+hw_timer_t* LEDTimer = NULL;
+portMUX_TYPE LEDTimerMux = portMUX_INITIALIZER_UNLOCKED;
+
+
+
 
 struct tm getTimeStruct()
 {
@@ -111,13 +121,23 @@ class MyServerCallbacks: public BLEServerCallbacks {
 };
 
 
-void IRAM_ATTR onTimer() {
-  portENTER_CRITICAL_ISR(&timerMux);
-  interruptCounter++;
-  portEXIT_CRITICAL_ISR(&timerMux);
+void IRAM_ATTR onLEDTimer() {
+  portENTER_CRITICAL_ISR(&LEDTimerMux);
+  LEDInterruptCounter++;
+  if(isStorageFull){
+    Serial.println("heyo stop");
+    /*
+     * LED code to blink
+     */
+  }
+  if(cumulativeHr >= 100){
+      Serial.println("oops");
+      /* Update LED 
+       * Send notification to user
+       */
+  }
+  portEXIT_CRITICAL_ISR(&LEDTimerMux);
 }
-
-  
 
 void IRAM_ATTR onDeepSleepTimer() {
   Interupt_Counter++;
@@ -206,6 +226,8 @@ String GetCurrentTMStamp(int yearTM, int monthTM, int dayTM,
   yearTM += 1900;
   monthTM += 1;
   minTM -= 18;
+
+/*
   Serial.println("Year " + String(yearTM));
   Serial.println("Month " + String(monthTM));
   Serial.println("Day " + String(dayTM));
@@ -213,6 +235,7 @@ String GetCurrentTMStamp(int yearTM, int monthTM, int dayTM,
   Serial.println("Min " + String(minTM));
   Serial.println("Sec " + String(secTM));
   //monthTM += 1;
+*/
   fYear = String(yearTM);
   if(monthTM < 10 ){
     fMonth = "0" + String(monthTM);
@@ -245,49 +268,27 @@ String GetCurrentTMStamp(int yearTM, int monthTM, int dayTM,
 
 int CalculateTimeElapsed(String tStart, String tEnd){
   // Getting variables
-  String sYearStr = String(tStart.charAt(0)) + String(tStart.charAt(1)) + String(tStart.charAt(2)) + String(tStart.charAt(3));
-  String sMonthStr = String(tStart.charAt(4)) + String(tStart.charAt(5));
-  String sDayStr = String(tStart.charAt(6)) + String(tStart.charAt(7));
   String sHrStr = String(tStart.charAt(8)) + String(tStart.charAt(9));
   String sMinStr = String(tStart.charAt(10)) + String(tStart.charAt(11));
   String sSecStr = String(tStart.charAt(12)) + String(tStart.charAt(13));
   
-  String eYearStr = String(tEnd.charAt(0)) + String(tEnd.charAt(1)) + String(tEnd.charAt(2)) + String(tEnd.charAt(3));
-  String eMonthStr = String(tEnd.charAt(4)) + String(tEnd.charAt(5));
-  String eDayStr = String(tEnd.charAt(6)) + String(tEnd.charAt(7));
   String eHrStr = String(tEnd.charAt(8)) + String(tEnd.charAt(9));
   String eMinStr = String(tEnd.charAt(10)) + String(tEnd.charAt(11));
   String eSecStr = String(tEnd.charAt(12)) + String(tEnd.charAt(13));
 
-  int sYear = sYearStr.toInt();
-  int sMonth = sMonthStr.toInt();
-  int sDay = sDayStr.toInt();
   int sHr = sHrStr.toInt();
   int sMin = sMinStr.toInt();
   int sSec = sSecStr.toInt();
-  
-  Serial.println(tStart);
-  Serial.println("Start: " + sYearStr + " " + sMonthStr + " " + sDayStr + " " + sHrStr + " " + sMinStr + " " + sSecStr);
 
-  int eYear = eYearStr.toInt();
-  int eMonth = eMonthStr.toInt();
-  int eDay = eDayStr.toInt();
   int eHr = eHrStr.toInt();
   int eMin = eMinStr.toInt();
   int eSec = eSecStr.toInt();
 
-  Serial.println(tEnd);
-  Serial.println("End: " + eYearStr + " " + eMonthStr + " " + eDayStr + " " + eHrStr + " " + eMinStr + " " + eSecStr);
-  
   preferences.begin("timeDifference", false);
   int prevEH = preferences.getInt("elapsedHour", 0);
   int prevEM = preferences.getInt("elapsedMin", 0);
   int prevES = preferences.getInt("elapsedSec", 0);
 
-  Serial.println("PrevEH: " + String(prevEH));
-  Serial.println("PrevEM: " + String(prevEM));
-  Serial.println("PrevES: " + String(prevES));
-  
   int currentES = 0;
   int currentEM = 0;
   int currentEH = 0;
@@ -312,11 +313,29 @@ int CalculateTimeElapsed(String tStart, String tEnd){
   } else{
     currentEH = eHr - sHr - carryHr;
   }
-
-  Serial.println("CurrEH: " + String(currentEH));
-  Serial.println("CurrEM: " + String(currentEM));
-  Serial.println("CurrES: " + String(currentES));
   
+  String cEHs;
+  String cEMs;
+  String cESs;
+  
+  if(currentEH < 10){
+    cEHs = "0" + String(currentEH);
+  } else{
+    cEHs = String(currentEH);  
+  }
+  if(currentEM < 10){
+    cEMs = "0" + String(currentEM);
+  } else{
+    cEMs = String(currentEM);  
+  }
+  if(currentES < 10){
+    cESs = "0" + String(currentES);
+  } else{
+    cESs = String(currentES);  
+  }
+
+  currentETString = cEHs + cEMs + cESs;
+
   // Adding to CumulativeSum
   int finES;
   int finEM;
@@ -345,12 +364,9 @@ int CalculateTimeElapsed(String tStart, String tEnd){
   preferences.putInt("elapsedSec", finES);
   
   Serial.println("ElapsedTime: " + String(finEH) + String(finEM) + String(finES));
-  Serial.println("yay!");
-
   return finEH;
   
 }
-
 
 void setup() {
   Serial.begin(115200);
@@ -375,19 +391,13 @@ void setup() {
   timerAttachInterrupt(SleepTimer, &onDeepSleepTimer, true);
   timerAlarmWrite(SleepTimer,1000000,true);
  
-  timer = timerBegin(0, 80, true);
-  timerAttachInterrupt(timer, &onTimer, true);
-  timerAlarmWrite(timer, 1000000, true);
-  timerAlarmEnable(timer);
+  LEDTimer = timerBegin(0, 80, true);
+  timerAttachInterrupt(LEDTimer, &onLEDTimer, true);
+  timerAlarmWrite(LEDTimer, 1000000, true);
+  timerAlarmEnable(LEDTimer);
 
   touchAttachInterrupt(T3, callback, Threshold);
   esp_sleep_enable_touchpad_wakeup();
-
-  // Remove all preferences under the opened namespace
-  // preferences.clear();
-
-  // Or remove the counter key only
-  //preferences.remove("counter");
 
   // Create BLE server name
   BLEDevice::init(bleServerName);
@@ -398,11 +408,6 @@ void setup() {
   // Create server with service UUID and ch
   BLEService *stringService = pServer->createService(SERVICE_UUID);
   
-  timer = timerBegin(0, 80, true);
-  timerAttachInterrupt(timer, &onTimer, true);
-  timerAlarmWrite(timer, 1000000, true);
-  timerAlarmEnable(timer);
-
   touchAttachInterrupt(T3, callback, Threshold);
   esp_sleep_enable_touchpad_wakeup();
   
@@ -490,110 +495,71 @@ void loop() {
   nz_tilt = digitalRead(nz_sensor_pin); // 0x0004   
   
   SensorCheck();
- 
- 
-  if (deviceConnected && !isStorageFull) {
-    delay(250);
+
+  /* Case 1 - Device is Connected and Storage is not Full*/
+  if (deviceConnected) {
     if(touchRead(T3) < 60){
       if(!isTouched){
-          isTouched = true;
-          
-          String namingStorage = baseNameDataSpace + String(count); // mmddyyyyhhmmf
-          int name_length = namingStorage.length() + 1;
-          char nameData[name_length];
-          namingStorage.toCharArray(nameData,name_length);
-          Serial.println(nameData);
+        isTouched = true;
 
-          static char timestamp[20];
-          preferences.begin(nameData, false);
-          translate = GetCurrentTMStamp(timeinfo.tm_year, 
-                                          timeinfo.tm_mon, 
-                                          timeinfo.tm_mday, 
-                                          timeinfo.tm_hour,
-                                          timeinfo.tm_min,
-                                          timeinfo.tm_sec);
-          dateValue = translate.toDouble();
-          
-          dtostrf(dateValue, 14, 0, timestamp);
-          tempStartData = timestamp;
-          
-          strcat(timestamp,"S");
-          Serial.print(timestamp);
-          Serial.println(". . . start");
-         
-          preferences.putString("date", timestamp);
-          preferences.end();
+        // Get start timestamp
+        translate = GetCurrentTMStamp(timeinfo.tm_year, 
+                                        timeinfo.tm_mon, 
+                                        timeinfo.tm_mday, 
+                                        timeinfo.tm_hour,
+                                        timeinfo.tm_min,
+                                        timeinfo.tm_sec);
+                                        
+        // Convert to double so that we can convert to char[]
+        dateValue = translate.toDouble();
+        dtostrf(dateValue, 14, 0, timestamp);
+        Serial.println(timestamp);
 
-          dateCharacteristics.setValue(timestamp);
-          dateCharacteristics.notify();
-        
-          count++;
-          if(count > 10){
-            isStorageFull = true;
-          }
+        // Save tempStart so that we can calculate elapsedTime
+        tempStartData = timestamp;
       }
     }
     if(touchRead(T3) >= 66){
+      delay(250);
       if(isTouched){
         isTouched = false;
-        
-        String namingStorage = baseNameDataSpace + String(count); // mmddyyyyhhmmf
-        int name_length = namingStorage.length() + 1;
-        char nameData[name_length];
-        namingStorage.toCharArray(nameData,name_length);
-        Serial.println(nameData);
-        
-        preferences.begin(nameData, false);
-        
-        static char timestamp[20];
+
         translate = GetCurrentTMStamp(timeinfo.tm_year, 
                                           timeinfo.tm_mon, 
                                           timeinfo.tm_mday, 
                                           timeinfo.tm_hour,
                                           timeinfo.tm_min,
                                           timeinfo.tm_sec);
-        dateValue = translate.toDouble();
-        dtostrf(dateValue, 14, 0, timestamp);
-        tempEndData = timestamp;
-
-        strcat(timestamp,"E");
-         
-        Serial.print(timestamp);
-        Serial.println(" . . . end");
         
-        preferences.putString("date", timestamp);
-        preferences.end();
+        dateValue = translate.toDouble();
+        static char tempEndArr[20];
+        dtostrf(dateValue, 14, 0, tempEndArr);
+        Serial.println(tempEndArr);
+        
+        tempEndData = tempEndArr;
+        cumulativeHr = CalculateTimeElapsed(tempStartData, tempEndData);
+
+        currentETString.toCharArray(currentETCharArray, 7);
+        strcat(timestamp,currentETCharArray);
+
+        Serial.println(currentETString);
+        Serial.println(currentETCharArray);
+        Serial.println(timestamp);
 
         dateCharacteristics.setValue(timestamp);
         dateCharacteristics.notify();
-
-        cumulativeHr = CalculateTimeElapsed(tempStartData, tempEndData);
-    
-        count++;
-        if(count > MAX_LOCAL_STORAGE){
-          isStorageFull = true;
-        }
-       
       }   
     }
+    
+    /* Sending data, clearing data*/
     if(isStorageFull){
-      Serial.println("Sorry, data is full. Connect to app to upload/clear entries.");
-      /*  UpdateLED
-       *  
+      /*
+       * Turn off LED
        */
-    }
-    if(cumulativeHr >= 100){
-      Serial.println("oops");
-      /* Update LED 
-       * Send notification to user
-       */
-    }
-  }
-  if(!deviceConnected){
-    if(isReadySendData){
       char timeSent[20];
       int i;
-      for(i = 1; i <= count; i++){
+      for(i = 1; i <= MAX_LOCAL_STORAGE; i++){
+        delay(10);
         String namingStorage = baseNameDataSpace + String(i);
         int name_length = namingStorage.length() + 1;
         char nameData[name_length];
@@ -607,29 +573,86 @@ void loop() {
         
         dateCharacteristics.setValue(timeSent);
         dateCharacteristics.notify();
+        preferences.clear();
         preferences.end();
             
-        count = 0;
+        count = 1;
         isStorageFull = false;
-        isReadySendData = false;
+        Serial.println("Cleared Storage");
+        
       }
     }
-    if(isClearingData){
-      int i;
-      for(i = 1; i <= 10; i++){
-        String namingStorage = baseNameDataSpace + String(i);
+  }
+  if(!deviceConnected && !isStorageFull){
+    if(touchRead(T3) < 60){
+      if(!isTouched){
+        // Locking mechanism to not spam
+        isTouched = true;
+
+        // Get start timestamp
+        translate = GetCurrentTMStamp(timeinfo.tm_year, 
+                                        timeinfo.tm_mon, 
+                                        timeinfo.tm_mday, 
+                                        timeinfo.tm_hour,
+                                        timeinfo.tm_min,
+                                        timeinfo.tm_sec);
+                                        
+        // Convert to double so that we can convert to char[]
+        dateValue = translate.toDouble();
+        dtostrf(dateValue, 14, 0, timestamp);
+        Serial.println(timestamp);
+
+        // Save tempStart so that we can calculate elapsedTime
+        tempStartData = timestamp;
+      }
+    }
+    if(touchRead(T3) >= 66){
+      if(isTouched){
+        // Locking mechanism to not spam
+        isTouched = false;
+
+        // Creating datastorage for startTime, elapsedTime
+        String namingStorage = baseNameDataSpace + String(count);
         int name_length = namingStorage.length() + 1;
         char nameData[name_length];
         namingStorage.toCharArray(nameData,name_length);
+        Serial.println(nameData);
+
+        // Getting end time to calculate elapsedTime
+        translate = GetCurrentTMStamp(timeinfo.tm_year, 
+                                          timeinfo.tm_mon, 
+                                          timeinfo.tm_mday, 
+                                          timeinfo.tm_hour,
+                                          timeinfo.tm_min,
+                                          timeinfo.tm_sec);
+
+        // Conversion to String
+        dateValue = translate.toDouble();
+        static char tempEndArr[20];
+        dtostrf(dateValue, 14, 0, tempEndArr);
+        Serial.println(tempEndArr);
+        tempEndData = tempEndArr;
+
+        // Get Cumulative Hour
+        cumulativeHr = CalculateTimeElapsed(tempStartData, tempEndData);
+
+        // Concatenate elapsedTime to startTime
+        currentETString.toCharArray(currentETCharArray, 7);
+        strcat(timestamp,currentETCharArray);
+
+        Serial.println(timestamp);
+
+        // Saving timestamp into flash
         preferences.begin(nameData, false);
-        preferences.clear();
+        preferences.putString("date", timestamp);
         preferences.end();
+
+        count++;
+        //Serial.println("Count: " + String(count));
+        if(count > MAX_LOCAL_STORAGE){
+          isStorageFull = true;
+        }
       }
-      isStorageFull = false;
-      isReadySendData = false;
-      isClearingData = false;
-      count = 1;    
-    }
+    }    
   }
-  
 }
