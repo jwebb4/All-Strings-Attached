@@ -39,21 +39,16 @@ Preferences preferences;
 BLECharacteristic dateCharacteristics("c84b5feb-a12f-45bb-a3ff-a6adce24f69e",BLECharacteristic::PROPERTY_NOTIFY);
 BLEDescriptor dateDescriptor(BLEUUID((uint16_t)0x2902));
 
-String timeDifference = "timeDifference";
 String baseNameDataSpace = "dtStorage";
 String tempStartData = "";
 String tempEndData = "";
-int count = 1;
+int pref_count = 1;
 
 int cumulativeHr;
 
 bool isTouched = false;
 bool isStorageFull = false; // most liekly set a limit of 5 start/end saves
 bool isClearingData = false;
-
-
-
-
 
 int minutes;
 int timeActive;
@@ -127,14 +122,28 @@ void IRAM_ATTR onLEDTimer() {
   if(isStorageFull){
     Serial.println("heyo stop");
     /*
-     * LED code to blink
+     * Yellow LED code to blink
      */
+    if(deviceConnected){
+      Serial.println("Transferred data");
+      /* 
+       *  Yellow LED turns off
+       */
+    }
   }
   if(cumulativeHr >= 100){
-      Serial.println("oops");
-      /* Update LED 
-       * Send notification to user
+    Serial.println("oops");
+    if(deviceConnected){
+      preferences.begin("timeDifference", false);
+      preferences.clear();
+      preferences.end();
+      /*
+       * Red LED turns off
        */
+    }
+    /*  
+     * Red LED blinks
+     */
   }
   portEXIT_CRITICAL_ISR(&LEDTimerMux);
 }
@@ -227,15 +236,6 @@ String GetCurrentTMStamp(int yearTM, int monthTM, int dayTM,
   monthTM += 1;
   minTM -= 18;
 
-/*
-  Serial.println("Year " + String(yearTM));
-  Serial.println("Month " + String(monthTM));
-  Serial.println("Day " + String(dayTM));
-  Serial.println("Hour " + String(hourTM));
-  Serial.println("Min " + String(minTM));
-  Serial.println("Sec " + String(secTM));
-  //monthTM += 1;
-*/
   fYear = String(yearTM);
   if(monthTM < 10 ){
     fMonth = "0" + String(monthTM);
@@ -368,9 +368,33 @@ int CalculateTimeElapsed(String tStart, String tEnd){
   
 }
 
+void LoadPrefCount(){
+  preferences.begin("prefCount", false);
+  pref_count = preferences.getInt("pref_count", 1);
+  preferences.end();
+}
+
+
+void IncrementPrefCount(){
+  preferences.begin("prefCount", false);
+  pref_count = preferences.getInt("pref_count", 1);
+  pref_count++;
+  preferences.putInt("pref_count", pref_count);
+  preferences.end();
+}
+
+void ClearPrefCount(){
+  preferences.begin("prefCount", false);
+  pref_count = preferences.getInt("pref_count", 1);
+  pref_count = 1;
+  preferences.putInt("pref_count", pref_count);
+  preferences.end();
+}
+
+
 void setup() {
   Serial.begin(115200);
-  Serial.println();
+  Serial.println("Big boi programming");
 
   if (isDeviceSettedUp == false){
       struct tm timeinfo = getTimeStruct();
@@ -449,39 +473,36 @@ void setup() {
     nz_lastState = nz_tilt;
 // -------------------------------------------
  
-  for(int i = 1; i <= 10; i++){
-        //
-        String namingStorage = baseNameDataSpace + String(i); // mmddyyyyhhmmf
-        int name_length = namingStorage.length() + 1;
-        char nameData[name_length];
-        namingStorage.toCharArray(nameData,name_length);
-        Serial.println(nameData);
-/*
-        preferences.begin(nameData, false);
-        String stuffs = preferences.getString("date","nodate");
-        preferences.end();
-        //String stuffs = preferences.getString("date","nodate");
-        Serial.println(stuffs);
-*/        
+  for(int i = 1; i <= MAX_LOCAL_STORAGE; i++){
+    String namingStorage = baseNameDataSpace + String(i); // dtstorage#
+    int name_length = namingStorage.length() + 1;
+    char nameData[name_length];
+    namingStorage.toCharArray(nameData,name_length);
+    Serial.println(nameData);
+
+    preferences.begin(nameData, false);
+    String stuffs = preferences.getString("date","");
+    Serial.println(stuffs);
+    preferences.end();
+    
+        
 // Clearing stuff for debug
+/*
         preferences.begin(nameData, false);
         preferences.clear();
         preferences.end();
-        
-      }
+*/       
+  }
 
-// Clearing stuff for debug
-
-  int name_length = timeDifference.length() + 1;
-  char timeDif[name_length];
-  timeDifference.toCharArray(timeDif, name_length);
-  Serial.println(timeDif);
-  
-  preferences.begin(timeDif, false);
-  preferences.clear();
+  preferences.begin("timeDifference", false);
+//  int someNumberYes = preferences.getInt("elapsedSec", 999);
+//  Serial.println(someNumberYes);
+//  preferences.clear();
   preferences.end();
-  
 
+  // Needs time to be initialized...
+  LoadPrefCount();
+  delay(5000);
 }
 
 void loop() {
@@ -495,6 +516,7 @@ void loop() {
   nz_tilt = digitalRead(nz_sensor_pin); // 0x0004   
   
   SensorCheck();
+  
 
   /* Case 1 - Device is Connected and Storage is not Full*/
   if (deviceConnected) {
@@ -520,7 +542,6 @@ void loop() {
       }
     }
     if(touchRead(T3) >= 66){
-      delay(250);
       if(isTouched){
         isTouched = false;
 
@@ -553,34 +574,58 @@ void loop() {
     
     /* Sending data, clearing data*/
     if(isStorageFull){
-      /*
-       * Turn off LED
-       */
+      Serial.println("Clearing complete data table");
       char timeSent[20];
       int i;
       for(i = 1; i <= MAX_LOCAL_STORAGE; i++){
-        delay(10);
+        // Getting name storage
         String namingStorage = baseNameDataSpace + String(i);
         int name_length = namingStorage.length() + 1;
         char nameData[name_length];
         namingStorage.toCharArray(nameData,name_length);
-      
+
+        // Getting data to send and clear
         preferences.begin(nameData, false);
         String timeString = preferences.getString("date","nodate");
         int timeStringLength = timeString.length() + 1;
-        
         timeString.toCharArray(timeSent,timeStringLength);
+
+        // Send data
+        dateCharacteristics.setValue(timeSent);
+        dateCharacteristics.notify();
+        preferences.clear();
         
+        preferences.end();
+      }
+      ClearPrefCount();
+      isStorageFull = false;
+    }
+    if(pref_count < 11 && pref_count > 1){
+      Serial.println("Clearing incomplete data table");
+      char timeSent[20];
+      int i;
+      for(i = 1; i < pref_count; i++){
+        // Getting name storage
+        String namingStorage = baseNameDataSpace + String(i);
+        int name_length = namingStorage.length() + 1;
+        char nameData[name_length];
+        namingStorage.toCharArray(nameData,name_length);
+
+        // Getting data to send and clear
+        preferences.begin(nameData, false);
+        String timeString = preferences.getString("date","nodate");
+        int timeStringLength = timeString.length() + 1;
+        timeString.toCharArray(timeSent,timeStringLength);
+
+        // Send data
         dateCharacteristics.setValue(timeSent);
         dateCharacteristics.notify();
         preferences.clear();
         preferences.end();
-            
-        count = 1;
-        isStorageFull = false;
-        Serial.println("Cleared Storage");
         
       }
+      ClearPrefCount();
+      isStorageFull = false;
     }
   }
   if(!deviceConnected && !isStorageFull){
@@ -612,10 +657,13 @@ void loop() {
         isTouched = false;
 
         // Creating datastorage for startTime, elapsedTime
-        String namingStorage = baseNameDataSpace + String(count);
+        String namingStorage = baseNameDataSpace + String(pref_count);
         int name_length = namingStorage.length() + 1;
         char nameData[name_length];
         namingStorage.toCharArray(nameData,name_length);
+
+        preferences.begin(nameData, false);
+        
         Serial.println(nameData);
 
         // Getting end time to calculate elapsedTime
@@ -643,13 +691,13 @@ void loop() {
         Serial.println(timestamp);
 
         // Saving timestamp into flash
-        preferences.begin(nameData, false);
+        
         preferences.putString("date", timestamp);
         preferences.end();
 
-        count++;
-        //Serial.println("Count: " + String(count));
-        if(count > MAX_LOCAL_STORAGE){
+        IncrementPrefCount();
+        //Serial.println("Count: " + String(pref_count));
+        if(pref_count > MAX_LOCAL_STORAGE){
           isStorageFull = true;
         }
       }
