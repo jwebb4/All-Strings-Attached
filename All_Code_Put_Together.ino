@@ -362,6 +362,7 @@ int CalculateTimeElapsed(String tStart, String tEnd){
   preferences.putInt("elapsedHour", finEH);
   preferences.putInt("elapsedMin", finEM);
   preferences.putInt("elapsedSec", finES);
+  preferences.end();
   
   Serial.println("ElapsedTime: " + String(finEH) + String(finEM) + String(finES));
   return finEH;
@@ -373,7 +374,6 @@ void LoadPrefCount(){
   pref_count = preferences.getInt("pref_count", 1);
   preferences.end();
 }
-
 
 void IncrementPrefCount(){
   preferences.begin("prefCount", false);
@@ -495,13 +495,18 @@ void setup() {
   }
 
   preferences.begin("timeDifference", false);
-//  int someNumberYes = preferences.getInt("elapsedSec", 999);
-//  Serial.println(someNumberYes);
+  int someNumberYes = preferences.getInt("elapsedSec", 999);
+  Serial.println(someNumberYes);
 //  preferences.clear();
   preferences.end();
 
   // Needs time to be initialized...
   LoadPrefCount();
+
+  if(pref_count > MAX_LOCAL_STORAGE){
+    isStorageFull = true;
+  }
+  
   delay(5000);
 }
 
@@ -516,15 +521,16 @@ void loop() {
   nz_tilt = digitalRead(nz_sensor_pin); // 0x0004   
   
   SensorCheck();
-  
 
   /* Case 1 - Device is Connected and Storage is not Full*/
   if (deviceConnected) {
+    /* Get Start Time Stamp */
     if(touchRead(T3) < 60){
       if(!isTouched){
+        Serial.println("DeviceConnected :: Start Touch");
         isTouched = true;
 
-        // Get start timestamp
+        // Get startTime
         translate = GetCurrentTMStamp(timeinfo.tm_year, 
                                         timeinfo.tm_mon, 
                                         timeinfo.tm_mday, 
@@ -532,41 +538,47 @@ void loop() {
                                         timeinfo.tm_min,
                                         timeinfo.tm_sec);
                                         
-        // Convert to double so that we can convert to char[]
-        dateValue = translate.toDouble();
-        dtostrf(dateValue, 14, 0, timestamp);
+        // Convert to char array, used for later
+        translate.toCharArray(timestamp, 15);
+        Serial.println("Start touch");
         Serial.println(timestamp);
 
-        // Save tempStart so that we can calculate elapsedTime
+        // Save String tempStart so that we can calculate elapsedTime
         tempStartData = timestamp;
       }
     }
+
+    /* Get End Time, Compute Elapsed Time, Send startTime & elapsedTime */
     if(touchRead(T3) >= 66){
       if(isTouched){
         isTouched = false;
-
+        Serial.println("DeviceConnected :: End Touch");
+        
+        // Get endTime
         translate = GetCurrentTMStamp(timeinfo.tm_year, 
                                           timeinfo.tm_mon, 
                                           timeinfo.tm_mday, 
                                           timeinfo.tm_hour,
                                           timeinfo.tm_min,
                                           timeinfo.tm_sec);
-        
-        dateValue = translate.toDouble();
-        static char tempEndArr[20];
-        dtostrf(dateValue, 14, 0, tempEndArr);
-        Serial.println(tempEndArr);
-        
-        tempEndData = tempEndArr;
-        cumulativeHr = CalculateTimeElapsed(tempStartData, tempEndData);
 
+        // convert to char array, save for later
+        static char tempEndArr[20];
+        translate.toCharArray(tempEndArr, 15);
+        tempEndData = tempEndArr;
+
+        // Get cumulative hour, also saves elapsed time
+        cumulativeHr = CalculateTimeElapsed(tempStartData, tempEndData);
         currentETString.toCharArray(currentETCharArray, 7);
+
+        // Concatenate startTime and elapsedTime
         strcat(timestamp,currentETCharArray);
 
-        Serial.println(currentETString);
+        Serial.println(tempStartData);
         Serial.println(currentETCharArray);
         Serial.println(timestamp);
 
+        // Send data to mobile application
         dateCharacteristics.setValue(timestamp);
         dateCharacteristics.notify();
       }   
@@ -600,6 +612,8 @@ void loop() {
       ClearPrefCount();
       isStorageFull = false;
     }
+
+    /* Clearing data regardless */
     if(pref_count < 11 && pref_count > 1){
       Serial.println("Clearing incomplete data table");
       char timeSent[20];
@@ -628,11 +642,14 @@ void loop() {
       isStorageFull = false;
     }
   }
+
+  /* Case 2 - Device is not connected && Storage is not full*/
   if(!deviceConnected && !isStorageFull){
+    /* Get startTime */
     if(touchRead(T3) < 60){
       if(!isTouched){
-        // Locking mechanism to not spam
         isTouched = true;
+        Serial.println("!DeviceConnected :: Start Touch");
 
         // Get start timestamp
         translate = GetCurrentTMStamp(timeinfo.tm_year, 
@@ -642,28 +659,25 @@ void loop() {
                                         timeinfo.tm_min,
                                         timeinfo.tm_sec);
                                         
-        // Convert to double so that we can convert to char[]
-        dateValue = translate.toDouble();
-        dtostrf(dateValue, 14, 0, timestamp);
-        Serial.println(timestamp);
+        // Convert to char array
+        translate.toCharArray(timestamp, 15);
 
         // Save tempStart so that we can calculate elapsedTime
         tempStartData = timestamp;
       }
     }
+
+    /* Get endTime*/
     if(touchRead(T3) >= 66){
       if(isTouched){
-        // Locking mechanism to not spam
         isTouched = false;
+        Serial.println("!DeviceConnected :: End Touch");
 
         // Creating datastorage for startTime, elapsedTime
         String namingStorage = baseNameDataSpace + String(pref_count);
         int name_length = namingStorage.length() + 1;
         char nameData[name_length];
         namingStorage.toCharArray(nameData,name_length);
-
-        preferences.begin(nameData, false);
-        
         Serial.println(nameData);
 
         // Getting end time to calculate elapsedTime
@@ -674,24 +688,20 @@ void loop() {
                                           timeinfo.tm_min,
                                           timeinfo.tm_sec);
 
-        // Conversion to String
-        dateValue = translate.toDouble();
+        // Conversion to char array
         static char tempEndArr[20];
-        dtostrf(dateValue, 14, 0, tempEndArr);
-        Serial.println(tempEndArr);
+        translate.toCharArray(tempEndArr, 15);
         tempEndData = tempEndArr;
 
-        // Get Cumulative Hour
+        // Get cumulative hour, also saves elapsed time
         cumulativeHr = CalculateTimeElapsed(tempStartData, tempEndData);
-
-        // Concatenate elapsedTime to startTime
         currentETString.toCharArray(currentETCharArray, 7);
+
+        // Concatenates startTime and elapsedTime
         strcat(timestamp,currentETCharArray);
 
-        Serial.println(timestamp);
-
         // Saving timestamp into flash
-        
+        preferences.begin(nameData, false);
         preferences.putString("date", timestamp);
         preferences.end();
 
