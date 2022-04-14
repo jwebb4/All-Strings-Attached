@@ -9,7 +9,17 @@
  Complete project details at https://RandomNerdTutorials.com/esp32-save-data-permanently-preferences/
 */
 
-// yyyymmddhhmmssF
+
+/* ------------------------------------------------------------------------------------------
+ * Libraries used:
+ *  sys/time.h - Get RTC time
+ *  Preferences - Save into Flash memory
+ *  BLEDevice - Provides functionality to build BLE server with characteristics.
+ *  BLEServer - ...
+ *  BLEUtils - ...
+ *  BLE2902 - ...
+ *  
+ */
 #include <sys/time.h>
 #include <Preferences.h>
 #include <BLEDevice.h>
@@ -17,10 +27,22 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
+// FILLER FOR TILT SENSORS
 #define Threshold 40
+
+/* ------------------------------------------------------------------------------------------
+ * DEFINE
+ *  Storing timestamps in flash memory
+ *  
+ */
 #define MAX_CHARS 15
 #define MAX_LOCAL_STORAGE 10
 
+/* ------------------------------------------------------------------------------------------
+ * DEFINE
+ *  Tilt Sensors usage based on pins
+ *  
+ */
 #define x_sensor_pin 25  //D2
 #define nx_sensor_pin 14 //D6
 #define y_sensor_pin 26  //D3
@@ -28,30 +50,62 @@
 #define z_sensor_pin 0   //D5
 #define nz_sensor_pin 2  //D9
 
+/* ------------------------------------------------------------------------------------------
+ * DEFINE
+ *  Creating BLE server using Service / Char UUID
+ *  
+ */
+#define bleServerName "Strings attached"
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b" // Currently using
-#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8" // still in use but need to switch
-
-#define dateCharacteristicUUID  "c84b5feb-a12f-45bb-a3ff-a6adce24f69e"
+#define dateCharacteristicUUID  "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define batteryCharacteristicUUID   "59d74fba-0f2b-4741-a057-d053662f2abe"
 
+/* ------------------------------------------------------------------------------------------
+ * Objects
+ *  Preferences - API for saving data
+ *  BLECharacteristic - API for creating a BLECharacteristic
+ *  BLEDescription - API for creating a BLEDescriptor
+ *  
+ */
 Preferences preferences;
+BLEServer* pServer = NULL;
+BLECharacteristic* dateCharacteristics = NULL;
+// BLEDescriptor dateDescriptor(BLEUUID((uint16_t)0x2902));
 
-BLECharacteristic dateCharacteristics("c84b5feb-a12f-45bb-a3ff-a6adce24f69e",BLECharacteristic::PROPERTY_NOTIFY);
-BLEDescriptor dateDescriptor(BLEUUID((uint16_t)0x2902));
-
+/* ------------------------------------------------------------------------------------------
+ * Preference Variables
+ *  baseNameDataSpace - Namespace for saving each of the timestamps
+ *  temp... - Temporarily stores a timestamp for computation of elapsed time
+ *  pref_count - Getting the number of counts currently ready to store in what namespace
+ *  cumulativeHr - Gets number of hours practice cumulatively to tell users whenever they need to change strings
+ *  
+ */
 String baseNameDataSpace = "dtStorage";
 String tempStartData = "";
 String tempEndData = "";
 int pref_count = 1;
-
 int cumulativeHr;
 
+String translate = "";
+static char timestamp[20];
+
+String currentETString = "";
+static char currentETCharArray[7]; // 6 + \n
+
+/* ------------------------------------------------------------------------------------------
+ * Behavioral States
+ *  isTouched - locking mechanism to not spam touch 
+ *  isStorageFull - Leads to special cases and interrupt
+ */
 bool isTouched = false;
 bool isStorageFull = false; // most liekly set a limit of 5 start/end saves
-bool isClearingData = false;
 
-int minutes;
-int timeActive;
+/* ------------------------------------------------------------------------------------------
+ * Tilt Sensor States
+ *  Each variable depicts the state of the tilt sensors 
+ *  
+ */
+ 
 int x_lastState = 0;
 int y_lastState = 0;
 int z_lastState = 0;
@@ -68,22 +122,29 @@ uint8_t nx_tilt = 0;
 uint8_t ny_tilt = 0;
 uint8_t nz_tilt = 0;
 
-String translate = "";
-static char timestamp[20];
+/* ------------------------------------------------------------------------------------------
+ * Bluetooth States
+ * 
+ *  
+ */
 
-String currentETString = "";
-static char currentETCharArray[7]; // 6 + \n
-double dateValue;
+bool deviceConnected = false;
+bool oldDeviceConnected = false;
 
 RTC_DATA_ATTR bool first_use = true;
 RTC_DATA_ATTR bool isDeviceSettedUp = false;
 
-bool deviceConnected = false;
-bool oldDeviceConnected = false;
 bool AllSensorsChecked = 0;
 bool SensorChanged = 0;
 
 touch_pad_t touchPin;
+
+/* ------------------------------------------------------------------------------------------
+ * RTC Counters and Interrupt Variables
+ *  LED
+ *  Sleep
+ * 
+ */
 
 volatile int Interupt_Counter = 0;
 hw_timer_t* SleepTimer = NULL;
@@ -94,8 +155,11 @@ int totalLEDInterruptCounter;
 hw_timer_t* LEDTimer = NULL;
 portMUX_TYPE LEDTimerMux = portMUX_INITIALIZER_UNLOCKED;
 
-
-
+/* ------------------------------------------------------------------------------------------
+ * TimeStruct
+ *  This is to get the RTC timer
+ * 
+ */
 
 struct tm getTimeStruct()
 {
@@ -104,7 +168,12 @@ struct tm getTimeStruct()
   return timeinfo;
 }
 
-
+/* ------------------------------------------------------------------------------------------
+ * CLASS: BLEServerCallbacks
+ *  This is to determining whether the device is connected or not
+ * 
+ */
+ 
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
       deviceConnected = true;
@@ -116,6 +185,12 @@ class MyServerCallbacks: public BLEServerCallbacks {
 };
 
 
+/* ------------------------------------------------------------------------------------------
+ * Interrupts - LED
+ *  Behaviors when we hit an interrupt
+ * 
+ */
+ 
 void IRAM_ATTR onLEDTimer() {
   portENTER_CRITICAL_ISR(&LEDTimerMux);
   LEDInterruptCounter++;
@@ -148,6 +223,11 @@ void IRAM_ATTR onLEDTimer() {
   portEXIT_CRITICAL_ISR(&LEDTimerMux);
 }
 
+/* ------------------------------------------------------------------------------------------
+ * Interrupts - DeepSleep
+ *  Behaviors when we hit an interrupt
+ * 
+ */
 void IRAM_ATTR onDeepSleepTimer() {
   Interupt_Counter++;
   Serial.println(String(Interupt_Counter));
@@ -159,6 +239,11 @@ void IRAM_ATTR onDeepSleepTimer() {
   }
 }
 
+/* ------------------------------------------------------------------------------------------
+ * Procedure - SensorCheck
+ *  Checks for sensors, change sensors states as needed
+ * 
+ */
 void SensorCheck() {
   AllSensorsChecked = 0;
   SensorChanged = 0;
@@ -191,6 +276,11 @@ void SensorCheck() {
   }
 }
 
+/* ------------------------------------------------------------------------------------------
+ * Procedure - WakeupChange
+ *  ...
+ * 
+ */
 void WakeupChange() { // initlize all wakeup sensors
   BUTTON_PIN_BITMASK = 0x0;
   if (!x_lastState) {
@@ -217,12 +307,19 @@ void WakeupChange() { // initlize all wakeup sensors
   esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK,ESP_EXT1_WAKEUP_ANY_HIGH);
 }
 
+
+/* ------------------------------------------------------------------------------------------
+ * To be dated
+ * 
+ */
 void callback(){
 }
 
-#define startTime // need to make this a continuous loop
-#define bleServerName "Strings attached"
-
+/* ------------------------------------------------------------------------------------------
+ * Function - GetCurrentTMStamp
+ *  Returns timestamp upon called
+ * 
+ */
 String GetCurrentTMStamp(int yearTM, int monthTM, int dayTM, 
  int hourTM, int minTM, int secTM){
   String fYear = "";
@@ -265,7 +362,11 @@ String GetCurrentTMStamp(int yearTM, int monthTM, int dayTM,
   return fYear + fMonth + fDay + fHr + fMin + fSec;                           
 }
 
-
+/* ------------------------------------------------------------------------------------------
+ * Function - GetCurrentTMStamp
+ *  Returns timestamp upon called
+ * 
+ */
 int CalculateTimeElapsed(String tStart, String tEnd){
   // Getting variables
   String sHrStr = String(tStart.charAt(8)) + String(tStart.charAt(9));
@@ -426,27 +527,24 @@ void setup() {
   // Create BLE server name
   BLEDevice::init(bleServerName);
   // Creating server with callbacks
-  BLEServer *pServer = BLEDevice::createServer();
+  pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
   
   // Create server with service UUID and ch
-  BLEService *stringService = pServer->createService(SERVICE_UUID);
-  
-  touchAttachInterrupt(T3, callback, Threshold);
-  esp_sleep_enable_touchpad_wakeup();
-  
-  stringService->addCharacteristic(&dateCharacteristics);
-  dateDescriptor.setValue("Date: ");
-  dateCharacteristics.addDescriptor(new BLE2902());
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+  dateCharacteristics = pService->createCharacteristic(
+                      dateCharacteristicUUID,
+                      BLECharacteristic::PROPERTY_NOTIFY
+                    );
+                    
+  dateCharacteristics->addDescriptor(new BLE2902());
 
-  stringService->start();
+  pService->start();
+  
   BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
   pAdvertising->addServiceUUID(SERVICE_UUID);
-  
   pAdvertising->setScanResponse(false);
-  pAdvertising->setMinPreferred(0x06);  // set value to 0x00 to not advertise this parameter
-  pAdvertising->setMinPreferred(0x12);
-  
+  pAdvertising->setMinPreferred(0x06);  // set value to 0x00 to not advertise this parameter  
   BLEDevice::startAdvertising();
 
 // initialize sensors
@@ -579,8 +677,8 @@ void loop() {
         Serial.println(timestamp);
 
         // Send data to mobile application
-        dateCharacteristics.setValue(timestamp);
-        dateCharacteristics.notify();
+        dateCharacteristics->setValue(timestamp);
+        dateCharacteristics->notify();
       }   
     }
     
@@ -603,8 +701,8 @@ void loop() {
         timeString.toCharArray(timeSent,timeStringLength);
 
         // Send data
-        dateCharacteristics.setValue(timeSent);
-        dateCharacteristics.notify();
+        dateCharacteristics->setValue(timeSent);
+        dateCharacteristics->notify();
         preferences.clear();
         
         preferences.end();
@@ -632,8 +730,8 @@ void loop() {
         timeString.toCharArray(timeSent,timeStringLength);
 
         // Send data
-        dateCharacteristics.setValue(timeSent);
-        dateCharacteristics.notify();
+        dateCharacteristics->setValue(timeSent);
+        dateCharacteristics->notify();
         preferences.clear();
         preferences.end();
         
