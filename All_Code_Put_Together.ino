@@ -20,6 +20,7 @@
  *  BLE2902 - ...
  *  
  */
+ 
 #include <sys/time.h>
 #include <Preferences.h>
 #include <BLEDevice.h>
@@ -58,6 +59,7 @@
 #define bleServerName "Strings attached"
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b" // Currently using
 #define dateCharacteristicUUID  "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define recentTimeCharacteristicUUID "3257bdf5-c7ca-4605-be08-d528d39cc6b5"
 #define batteryCharacteristicUUID   "59d74fba-0f2b-4741-a057-d053662f2abe"
 
 /* ------------------------------------------------------------------------------------------
@@ -70,6 +72,8 @@
 Preferences preferences;
 BLEServer* pServer = NULL;
 BLECharacteristic* dateCharacteristics = NULL;
+BLECharacteristic* recentTimeCharacteristics = NULL;
+BLECharacteristic* batteryCharacteristics = NULL;
 // BLEDescriptor dateDescriptor(BLEUUID((uint16_t)0x2902));
 
 /* ------------------------------------------------------------------------------------------
@@ -99,6 +103,18 @@ static char currentETCharArray[7]; // 6 + \n
  */
 bool isTouched = false;
 bool isStorageFull = false; // most liekly set a limit of 5 start/end saves
+bool isTransfer = false;
+int currentLoopCount = 1;
+
+/* ------------------------------------------------------------------------------------------
+ * Timing Mechanism
+ *  
+ */
+
+int sendState = LOW;
+unsigned long previousMillis = 0;
+const long sendInterval = 500;
+
 
 /* ------------------------------------------------------------------------------------------
  * Tilt Sensor States
@@ -155,6 +171,11 @@ int totalLEDInterruptCounter;
 hw_timer_t* LEDTimer = NULL;
 portMUX_TYPE LEDTimerMux = portMUX_INITIALIZER_UNLOCKED;
 
+volatile int TransferInterruptCounter;
+int totalTransferInterruptCounter;
+hw_timer_t* TransferTimer = NULL;
+portMUX_TYPE TransferTimerMux = portMUX_INITIALIZER_UNLOCKED;
+
 /* ------------------------------------------------------------------------------------------
  * TimeStruct
  *  This is to get the RTC timer
@@ -206,6 +227,11 @@ void IRAM_ATTR onLEDTimer() {
        */
     }
   }
+  /*
+  if(deviceConnected && (isStorageFull || pref_count > 1)){
+    isTransfer = true;
+  }
+  */
   if(cumulativeHr >= 100){
     Serial.println("oops");
     if(deviceConnected){
@@ -219,8 +245,20 @@ void IRAM_ATTR onLEDTimer() {
     /*  
      * Red LED blinks
      */
-  }
+  }  
   portEXIT_CRITICAL_ISR(&LEDTimerMux);
+}
+
+/* ------------------------------
+ * 
+ */
+void IRAM_ATTR onTransferTimer() {
+  portENTER_CRITICAL_ISR(&TransferTimerMux);
+  TransferInterruptCounter++;
+  if(deviceConnected && (isStorageFull || pref_count > 1)){
+    isTransfer = true;
+  }
+  portEXIT_CRITICAL_ISR(&TransferTimerMux);
 }
 
 /* ------------------------------------------------------------------------------------------
@@ -521,6 +559,11 @@ void setup() {
   timerAlarmWrite(LEDTimer, 1000000, true);
   timerAlarmEnable(LEDTimer);
 
+  TransferTimer = timerBegin(1, 80, true);
+  timerAttachInterrupt(TransferTimer, &onTransferTimer, true);
+  timerAlarmWrite(TransferTimer, 10000, true);
+  timerAlarmEnable(TransferTimer);
+
   touchAttachInterrupt(T3, callback, Threshold);
   esp_sleep_enable_touchpad_wakeup();
 
@@ -532,12 +575,20 @@ void setup() {
   
   // Create server with service UUID and ch
   BLEService *pService = pServer->createService(SERVICE_UUID);
+  
   dateCharacteristics = pService->createCharacteristic(
                       dateCharacteristicUUID,
-                      BLECharacteristic::PROPERTY_NOTIFY
+                      BLECharacteristic::PROPERTY_NOTIFY | 
+                      BLECharacteristic::PROPERTY_INDICATE
                     );
-                    
+  recentTimeCharacteristics = pService->createCharacteristic(
+                      recentTimeCharacteristicUUID,
+                      BLECharacteristic::PROPERTY_NOTIFY | 
+                      BLECharacteristic::PROPERTY_INDICATE
+                    );
+  
   dateCharacteristics->addDescriptor(new BLE2902());
+  recentTimeCharacteristics->addDescriptor(new BLE2902());
 
   pService->start();
   
@@ -545,6 +596,7 @@ void setup() {
   pAdvertising->addServiceUUID(SERVICE_UUID);
   pAdvertising->setScanResponse(false);
   pAdvertising->setMinPreferred(0x06);  // set value to 0x00 to not advertise this parameter  
+  pAdvertising->setMinPreferred(0x12); 
   BLEDevice::startAdvertising();
 
 // initialize sensors
@@ -610,6 +662,9 @@ void setup() {
 
 void loop() {
   struct tm timeinfo = getTimeStruct();
+
+  recentTimeCharacteristics->setValue("recentTimeChar");
+  recentTimeCharacteristics->notify();  
   
   x_tilt = !digitalRead(x_sensor_pin); // 0x00200000
   y_tilt = !digitalRead(y_sensor_pin); // 0x00400000
@@ -683,13 +738,12 @@ void loop() {
     }
     
     /* Sending data, clearing data*/
-    if(isStorageFull){
-      Serial.println("Clearing complete data table");
+    if((isStorageFull || pref_count > 1) && isTransfer){
+      // Serial.println("Clearing data table");
       char timeSent[20];
-      int i;
-      for(i = 1; i <= MAX_LOCAL_STORAGE; i++){
+
         // Getting name storage
-        String namingStorage = baseNameDataSpace + String(i);
+        String namingStorage = baseNameDataSpace + String(currentLoopCount);
         int name_length = namingStorage.length() + 1;
         char nameData[name_length];
         namingStorage.toCharArray(nameData,name_length);
@@ -702,22 +756,19 @@ void loop() {
 
         // Send data
         dateCharacteristics->setValue(timeSent);
-        dateCharacteristics->notify();
+        dateCharacteristics->indicate();
         preferences.clear();
         
         preferences.end();
-      }
-      ClearPrefCount();
-      isStorageFull = false;
-    }
 
-    /* Clearing data regardless */
-    if(pref_count < 11 && pref_count > 1){
-      Serial.println("Clearing incomplete data table");
-      char timeSent[20];
+      Serial.println(nameData);
+      
+      currentLoopCount++;
+      /*
       int i;
       for(i = 1; i < pref_count; i++){
         // Getting name storage
+        Serial.println("hm");
         String namingStorage = baseNameDataSpace + String(i);
         int name_length = namingStorage.length() + 1;
         char nameData[name_length];
@@ -731,14 +782,22 @@ void loop() {
 
         // Send data
         dateCharacteristics->setValue(timeSent);
-        dateCharacteristics->notify();
+        dateCharacteristics->indicate();
         preferences.clear();
-        preferences.end();
         
+        preferences.end();
       }
-      ClearPrefCount();
-      isStorageFull = false;
+       */
+
+      if(currentLoopCount >= pref_count){
+        ClearPrefCount();
+        isStorageFull = false;
+        currentLoopCount = 1;
+      }
+      isTransfer = false;
+      
     }
+
   }
 
   /* Case 2 - Device is not connected && Storage is not full*/
@@ -776,7 +835,6 @@ void loop() {
         int name_length = namingStorage.length() + 1;
         char nameData[name_length];
         namingStorage.toCharArray(nameData,name_length);
-        Serial.println(nameData);
 
         // Getting end time to calculate elapsedTime
         translate = GetCurrentTMStamp(timeinfo.tm_year, 
@@ -804,6 +862,10 @@ void loop() {
         preferences.end();
 
         IncrementPrefCount();
+
+        Serial.println(nameData);
+        Serial.println(timestamp);
+        
         //Serial.println("Count: " + String(pref_count));
         if(pref_count > MAX_LOCAL_STORAGE){
           isStorageFull = true;
@@ -811,4 +873,5 @@ void loop() {
       }
     }    
   }
+  
 }
