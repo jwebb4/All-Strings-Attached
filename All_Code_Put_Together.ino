@@ -59,8 +59,8 @@
 #define bleServerName "Strings attached"
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b" // Currently using
 #define dateCharacteristicUUID  "beb5483e-36e1-4688-b7f5-ea07361b26a8"
-#define recentTimeCharacteristicUUID "3257bdf5-c7ca-4605-be08-d528d39cc6b5"
-#define batteryCharacteristicUUID   "59d74fba-0f2b-4741-a057-d053662f2abe"
+#define recentTimeCharacteristicUUID "688091db-1736-4179-b7ce-e42a724a6a68"
+#define batteryCharacteristicUUID   "0515e27d-dd91-4f96-9452-5f43649c1819"
 
 /* ------------------------------------------------------------------------------------------
  * Objects
@@ -104,16 +104,21 @@ static char currentETCharArray[7]; // 6 + \n
 bool isTouched = false;
 bool isStorageFull = false; // most liekly set a limit of 5 start/end saves
 bool isTransfer = false;
-int currentLoopCount = 1;
+
+
+
+
 
 /* ------------------------------------------------------------------------------------------
  * Timing Mechanism
  *  
  */
 
-int sendState = LOW;
-unsigned long previousMillis = 0;
-const long sendInterval = 500;
+int currentLoopCount = 1;
+
+
+
+
 
 
 /* ------------------------------------------------------------------------------------------
@@ -146,6 +151,8 @@ uint8_t nz_tilt = 0;
 
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
+
+bool firstConnection = false;
 
 RTC_DATA_ATTR bool first_use = true;
 RTC_DATA_ATTR bool isDeviceSettedUp = false;
@@ -198,6 +205,7 @@ struct tm getTimeStruct()
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
       deviceConnected = true;
+      firstConnection = true;
     };
 
     void onDisconnect(BLEServer* pServer) {
@@ -267,6 +275,7 @@ void IRAM_ATTR onTransferTimer() {
  * 
  */
 void IRAM_ATTR onDeepSleepTimer() {
+  portENTER_CRITICAL_ISR(&timerMux);
   Interupt_Counter++;
   Serial.println(String(Interupt_Counter));
   if (Interupt_Counter >= 20) {
@@ -275,6 +284,7 @@ void IRAM_ATTR onDeepSleepTimer() {
       esp_bt_controller_disable();
       esp_deep_sleep_start();
   }
+  portEXIT_CRITICAL_ISR(&timerMux);
 }
 
 /* ------------------------------------------------------------------------------------------
@@ -561,7 +571,7 @@ void setup() {
 
   TransferTimer = timerBegin(1, 80, true);
   timerAttachInterrupt(TransferTimer, &onTransferTimer, true);
-  timerAlarmWrite(TransferTimer, 10000, true);
+  timerAlarmWrite(TransferTimer, 50000, true);
   timerAlarmEnable(TransferTimer);
 
   touchAttachInterrupt(T3, callback, Threshold);
@@ -569,6 +579,7 @@ void setup() {
 
   // Create BLE server name
   BLEDevice::init(bleServerName);
+  
   // Creating server with callbacks
   pServer = BLEDevice::createServer();
   pServer->setCallbacks(new MyServerCallbacks());
@@ -578,26 +589,18 @@ void setup() {
   
   dateCharacteristics = pService->createCharacteristic(
                       dateCharacteristicUUID,
-                      BLECharacteristic::PROPERTY_NOTIFY | 
-                      BLECharacteristic::PROPERTY_INDICATE
+                      BLECharacteristic::PROPERTY_NOTIFY
                     );
+  dateCharacteristics->setValue("dateChar");
   recentTimeCharacteristics = pService->createCharacteristic(
                       recentTimeCharacteristicUUID,
-                      BLECharacteristic::PROPERTY_NOTIFY | 
-                      BLECharacteristic::PROPERTY_INDICATE
+                      BLECharacteristic::PROPERTY_NOTIFY
                     );
-  
-  dateCharacteristics->addDescriptor(new BLE2902());
-  recentTimeCharacteristics->addDescriptor(new BLE2902());
+  recentTimeCharacteristics->setValue("recentTimeChar");
 
   pService->start();
-  
-  BLEAdvertising *pAdvertising = BLEDevice::getAdvertising();
-  pAdvertising->addServiceUUID(SERVICE_UUID);
-  pAdvertising->setScanResponse(false);
-  pAdvertising->setMinPreferred(0x06);  // set value to 0x00 to not advertise this parameter  
-  pAdvertising->setMinPreferred(0x12); 
-  BLEDevice::startAdvertising();
+  BLEAdvertising *pAdvertising = pServer->getAdvertising();
+  pAdvertising->start();
 
 // initialize sensors
 // -------------------------------------------
@@ -634,20 +637,13 @@ void setup() {
     String stuffs = preferences.getString("date","");
     Serial.println(stuffs);
     preferences.end();
-    
-        
-// Clearing stuff for debug
-/*
-        preferences.begin(nameData, false);
-        preferences.clear();
-        preferences.end();
-*/       
+         
   }
 
   preferences.begin("timeDifference", false);
   int someNumberYes = preferences.getInt("elapsedSec", 999);
   Serial.println(someNumberYes);
-//  preferences.clear();
+  preferences.clear();
   preferences.end();
 
   // Needs time to be initialized...
@@ -656,16 +652,14 @@ void setup() {
   if(pref_count > MAX_LOCAL_STORAGE){
     isStorageFull = true;
   }
-  
+  recentTimeCharacteristics->setValue("recentTimeChar");
+  recentTimeCharacteristics->notify(); 
   delay(5000);
 }
 
 void loop() {
   struct tm timeinfo = getTimeStruct();
-
-  recentTimeCharacteristics->setValue("recentTimeChar");
-  recentTimeCharacteristics->notify();  
-  
+ 
   x_tilt = !digitalRead(x_sensor_pin); // 0x00200000
   y_tilt = !digitalRead(y_sensor_pin); // 0x00400000
   z_tilt = !digitalRead(z_sensor_pin); // 0x0001
@@ -734,60 +728,39 @@ void loop() {
         // Send data to mobile application
         dateCharacteristics->setValue(timestamp);
         dateCharacteristics->notify();
-      }   
+
+      }
     }
     
     /* Sending data, clearing data*/
     if((isStorageFull || pref_count > 1) && isTransfer){
-      // Serial.println("Clearing data table");
+      if(currentLoopCount == 1){
+        delay(50);
+      }
       char timeSent[20];
 
-        // Getting name storage
-        String namingStorage = baseNameDataSpace + String(currentLoopCount);
-        int name_length = namingStorage.length() + 1;
-        char nameData[name_length];
-        namingStorage.toCharArray(nameData,name_length);
+      // Getting name storage
+      String namingStorage = baseNameDataSpace + String(currentLoopCount);
+      int name_length = namingStorage.length() + 1;
+      char nameData[name_length];
+      namingStorage.toCharArray(nameData,name_length);
 
-        // Getting data to send and clear
-        preferences.begin(nameData, false);
-        String timeString = preferences.getString("date","nodate");
-        int timeStringLength = timeString.length() + 1;
-        timeString.toCharArray(timeSent,timeStringLength);
+      // Getting data to send and clear
+      preferences.begin(nameData, false);
+      String timeString = preferences.getString("date","nodate");
+      int timeStringLength = timeString.length() + 1;
+      timeString.toCharArray(timeSent,timeStringLength);
 
-        // Send data
-        dateCharacteristics->setValue(timeSent);
-        dateCharacteristics->indicate();
-        preferences.clear();
+      // Send data
+      dateCharacteristics->setValue(timeSent);
+      dateCharacteristics->notify();
+      preferences.clear();
         
-        preferences.end();
+      preferences.end();
 
       Serial.println(nameData);
       
       currentLoopCount++;
-      /*
-      int i;
-      for(i = 1; i < pref_count; i++){
-        // Getting name storage
-        Serial.println("hm");
-        String namingStorage = baseNameDataSpace + String(i);
-        int name_length = namingStorage.length() + 1;
-        char nameData[name_length];
-        namingStorage.toCharArray(nameData,name_length);
-
-        // Getting data to send and clear
-        preferences.begin(nameData, false);
-        String timeString = preferences.getString("date","nodate");
-        int timeStringLength = timeString.length() + 1;
-        timeString.toCharArray(timeSent,timeStringLength);
-
-        // Send data
-        dateCharacteristics->setValue(timeSent);
-        dateCharacteristics->indicate();
-        preferences.clear();
-        
-        preferences.end();
-      }
-       */
 
       if(currentLoopCount >= pref_count){
         ClearPrefCount();
@@ -797,7 +770,21 @@ void loop() {
       isTransfer = false;
       
     }
-
+    if(firstConnection){
+      delay(50);
+      String recentTimeStamp = GetCurrentTMStamp(timeinfo.tm_year, 
+                                          timeinfo.tm_mon, 
+                                          timeinfo.tm_mday, 
+                                          timeinfo.tm_hour,
+                                          timeinfo.tm_min,
+                                          timeinfo.tm_sec);
+      char rtsChar[15];
+      
+      recentTimeStamp.toCharArray(rtsChar, 15);
+      recentTimeCharacteristics->setValue(rtsChar);
+      recentTimeCharacteristics->notify(); 
+      firstConnection = false;
+    }
   }
 
   /* Case 2 - Device is not connected && Storage is not full*/
