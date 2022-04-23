@@ -26,7 +26,7 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-#include <BLE2902.h>
+//#include <BLE2902.h>
 
 // FILLER FOR TILT SENSORS
 #define Threshold 40
@@ -210,6 +210,7 @@ class MyServerCallbacks: public BLEServerCallbacks {
 
     void onDisconnect(BLEServer* pServer) {
       deviceConnected = false;
+      firstConnection = false;
     }
 };
 
@@ -278,7 +279,7 @@ void IRAM_ATTR onDeepSleepTimer() {
   portENTER_CRITICAL_ISR(&timerMux);
   Interupt_Counter++;
   Serial.println(String(Interupt_Counter));
-  if (Interupt_Counter >= 20) {
+  if (Interupt_Counter >= 60) {
       Serial.println("start deep sleep");
       esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK,ESP_EXT1_WAKEUP_ANY_HIGH);
       esp_bt_controller_disable();
@@ -560,7 +561,7 @@ void setup() {
     }
   isDeviceSettedUp = true;
   
-  SleepTimer = timerBegin(0,80,true);
+  SleepTimer = timerBegin(2,80,true);
   timerAttachInterrupt(SleepTimer, &onDeepSleepTimer, true);
   timerAlarmWrite(SleepTimer,1000000,true);
  
@@ -771,7 +772,7 @@ void loop() {
       
     }
     if(firstConnection){
-      delay(50);
+      delay(100);
       String recentTimeStamp = GetCurrentTMStamp(timeinfo.tm_year, 
                                           timeinfo.tm_mon, 
                                           timeinfo.tm_mday, 
@@ -858,7 +859,10 @@ void loop() {
           isStorageFull = true;
         }
       }
-    }    
+    }
+    if(!firstConnection){
+      firstConnection = true; 
+    }   
   }
   
 }
