@@ -1,12 +1,12 @@
 /*
- ESP32 startup counter example with Preferences library.
+All Strings Attached Program
+  Team Members: Kimberly Tse, Joshua Webb, Carlos Rosales
+  Team Advisor: Dr. Ben Abbott
 
- This simple example demonstrates using the Preferences library to store how many times the ESP32 module has booted. 
- The Preferences library is a wrapper around the Non-volatile storage on ESP32 processor.
-
- created for arduino-esp32 09 Feb 2017 by Martin Sloup (Arcao)
- 
- Complete project details at https://RandomNerdTutorials.com/esp32-save-data-permanently-preferences/
+  Purpose: Send time to the mobile application associated with this project whenever 
+              it is connected && detects activity
+           Save time to local memory whenver it is not connected && detects activity
+  
 */
 
 
@@ -81,7 +81,8 @@ BLECharacteristic* batteryCharacteristics = NULL;
  *  baseNameDataSpace - Namespace for saving each of the timestamps
  *  temp... - Temporarily stores a timestamp for computation of elapsed time
  *  pref_count - Getting the number of counts currently ready to store in what namespace
- *  cumulativeHr - Gets number of hours practice cumulatively to tell users whenever they need to change strings
+ *  cumulativeHr - Gets number of hours practice cumulatively to tell users whenever 
+ *    they need to change strings
  *  
  */
 String baseNameDataSpace = "dtStorage";
@@ -91,7 +92,7 @@ int pref_count = 1;
 int cumulativeHr;
 
 String translate = "";
-static char timestamp[20];
+static char timestamp[21];
 
 String currentETString = "";
 static char currentETCharArray[7]; // 6 + \n
@@ -100,10 +101,11 @@ static char currentETCharArray[7]; // 6 + \n
  * Behavioral States
  *  isTouched - locking mechanism to not spam touch 
  *  isStorageFull - Leads to special cases and interrupt
+ *  isTransfer - checks to see if the transfer is complete
  */
 bool isTouched = false;
 bool isStorageFull = false; // most liekly set a limit of 5 start/end saves
-bool isTransfer = false;
+RTC_DATA_ATTR bool isTransfer = false;
 
 
 
@@ -111,13 +113,10 @@ bool isTransfer = false;
 
 /* ------------------------------------------------------------------------------------------
  * Timing Mechanism
- *  
+ *  currentLoopCount - when uploading data, checks to see if what value we are uploading 
  */
 
 int currentLoopCount = 1;
-
-
-
 
 
 
@@ -145,7 +144,15 @@ uint8_t nz_tilt = 0;
 
 /* ------------------------------------------------------------------------------------------
  * Bluetooth States
- * 
+ *  deviceConnected - state of whether microcontroller is connected to the mobile application
+ *  oldDeviceConnected - whether we have connected to the same device as before
+ *  firstConnection - whether it is the first transmission of data since connectivity 
+ *    (repeats on each connection)
+ *  first_use - relates to oldDeviceConnected
+ *  isDeviceSettedUp - sets time of reference for microcontroller
+ *  
+ *  AllSensorsChecked - 
+ *  SensorsChanged - 
  *  
  */
 
@@ -205,6 +212,7 @@ struct tm getTimeStruct()
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
       deviceConnected = true;
+       BLEDevice::startAdvertising();
       firstConnection = true;
     };
 
@@ -225,12 +233,12 @@ void IRAM_ATTR onLEDTimer() {
   portENTER_CRITICAL_ISR(&LEDTimerMux);
   LEDInterruptCounter++;
   if(isStorageFull){
-    Serial.println("heyo stop");
+    //Serial.println("heyo stop");
     /*
      * Yellow LED code to blink
      */
     if(deviceConnected){
-      Serial.println("Transferred data");
+      //Serial.println("Transferred data");
       /* 
        *  Yellow LED turns off
        */
@@ -242,11 +250,13 @@ void IRAM_ATTR onLEDTimer() {
   }
   */
   if(cumulativeHr >= 100){
-    Serial.println("oops");
+    //Serial.println("oops");
     if(deviceConnected){
+      /*
       preferences.begin("timeDifference", false);
       preferences.clear();
       preferences.end();
+      */
       /*
        * Red LED turns off
        */
@@ -280,7 +290,7 @@ void IRAM_ATTR onDeepSleepTimer() {
   Interupt_Counter++;
   Serial.println(String(Interupt_Counter));
   if (Interupt_Counter >= 60) {
-      Serial.println("start deep sleep");
+      //Serial.println("start deep sleep");
       esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK,ESP_EXT1_WAKEUP_ANY_HIGH);
       esp_bt_controller_disable();
       esp_deep_sleep_start();
@@ -361,7 +371,7 @@ void WakeupChange() { // initlize all wakeup sensors
  * To be dated
  * 
  */
-void callback(){
+void IRAM_ATTR callback(){
 }
 
 /* ------------------------------------------------------------------------------------------
@@ -380,7 +390,7 @@ String GetCurrentTMStamp(int yearTM, int monthTM, int dayTM,
 
   yearTM += 1900;
   monthTM += 1;
-  minTM -= 18;
+  //minTM -= 18;
 
   fYear = String(yearTM);
   if(monthTM < 10 ){
@@ -438,6 +448,7 @@ int CalculateTimeElapsed(String tStart, String tEnd){
   int prevEH = preferences.getInt("elapsedHour", 0);
   int prevEM = preferences.getInt("elapsedMin", 0);
   int prevES = preferences.getInt("elapsedSec", 0);
+  preferences.end();
 
   int currentES = 0;
   int currentEM = 0;
@@ -509,8 +520,15 @@ int CalculateTimeElapsed(String tStart, String tEnd){
   finEH = currentEH + prevEH + carry;
   carry = 0;
 
+  preferences.begin("timeDifference", false);
   preferences.putInt("elapsedHour", finEH);
+  preferences.end();
+  
+  preferences.begin("timeDifference", false);
   preferences.putInt("elapsedMin", finEM);
+  preferences.end();
+
+  preferences.begin("timeDifference", false);
   preferences.putInt("elapsedSec", finES);
   preferences.end();
   
@@ -519,6 +537,11 @@ int CalculateTimeElapsed(String tStart, String tEnd){
   
 }
 
+/*  Load/Increment/ClearPrefCount
+ *   Allows us to manipuate the current count of data -1 saved in
+ *   storage
+ * 
+ */
 void LoadPrefCount(){
   preferences.begin("prefCount", false);
   pref_count = preferences.getInt("pref_count", 1);
@@ -543,24 +566,46 @@ void ClearPrefCount(){
 
 
 void setup() {
+  // Begin baud rate
   Serial.begin(115200);
-  Serial.println("Big boi programming");
+  Serial.println("All Strings Attached Program");
+  
 
-  if (isDeviceSettedUp == false){
-      struct tm timeinfo = getTimeStruct();
-      timeinfo.tm_hour = 0;
-      timeinfo.tm_min = 0;
-      timeinfo.tm_sec = 0;
-      timeinfo.tm_mon = 0; // January -- need to add one
-      timeinfo.tm_mday = 1; // 1st
-      timeinfo.tm_year = 1970 - 1900; // 2021
+  // Set up timing for microcontroller if powered off before
+  struct timeval tv;
+  tv.tv_sec =   21600;  // enter UTC UNIX time (get it from https://www.unixtimestamp.com )
+  settimeofday(&tv, NULL);
+
+  // Set timezone to Epoch Central time
+  setenv("TZ", "CST+6CDT,M3.2.0/2,M11.1.0/2", 1); // https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
+  tzset();
+
+  // Create BLE server name & callbacks
+  BLEDevice::init(bleServerName);
   
-      struct timeval tv;
-      tv.tv_sec = mktime(&timeinfo);
-      settimeofday(&tv, NULL);
-    }
-  isDeviceSettedUp = true;
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
   
+  // Create service and characteristics
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+  
+  dateCharacteristics = pService->createCharacteristic(
+                      dateCharacteristicUUID,
+                      BLECharacteristic::PROPERTY_NOTIFY
+                    );
+  dateCharacteristics->setValue("dateChar");
+  recentTimeCharacteristics = pService->createCharacteristic(
+                      recentTimeCharacteristicUUID,
+                      BLECharacteristic::PROPERTY_NOTIFY
+                    );
+  recentTimeCharacteristics->setValue("recentTimeChar");
+
+  // Start server and advertise characteristics
+  pService->start();
+  BLEAdvertising *pAdvertising = pServer->getAdvertising();
+  pAdvertising->start();
+
+  // Start up multiple timer interrups
   SleepTimer = timerBegin(2,80,true);
   timerAttachInterrupt(SleepTimer, &onDeepSleepTimer, true);
   timerAlarmWrite(SleepTimer,1000000,true);
@@ -575,33 +620,9 @@ void setup() {
   timerAlarmWrite(TransferTimer, 50000, true);
   timerAlarmEnable(TransferTimer);
 
+  // Set up deep sleep interrupt
   touchAttachInterrupt(T3, callback, Threshold);
   esp_sleep_enable_touchpad_wakeup();
-
-  // Create BLE server name
-  BLEDevice::init(bleServerName);
-  
-  // Creating server with callbacks
-  pServer = BLEDevice::createServer();
-  pServer->setCallbacks(new MyServerCallbacks());
-  
-  // Create server with service UUID and ch
-  BLEService *pService = pServer->createService(SERVICE_UUID);
-  
-  dateCharacteristics = pService->createCharacteristic(
-                      dateCharacteristicUUID,
-                      BLECharacteristic::PROPERTY_NOTIFY
-                    );
-  dateCharacteristics->setValue("dateChar");
-  recentTimeCharacteristics = pService->createCharacteristic(
-                      recentTimeCharacteristicUUID,
-                      BLECharacteristic::PROPERTY_NOTIFY
-                    );
-  recentTimeCharacteristics->setValue("recentTimeChar");
-
-  pService->start();
-  BLEAdvertising *pAdvertising = pServer->getAdvertising();
-  pAdvertising->start();
 
 // initialize sensors
 // -------------------------------------------
@@ -626,7 +647,9 @@ void setup() {
     ny_lastState = ny_tilt;
     nz_lastState = nz_tilt;
 // -------------------------------------------
- 
+
+ /*Check Storage*/
+/*
   for(int i = 1; i <= MAX_LOCAL_STORAGE; i++){
     String namingStorage = baseNameDataSpace + String(i); // dtstorage#
     int name_length = namingStorage.length() + 1;
@@ -640,26 +663,29 @@ void setup() {
     preferences.end();
          
   }
-
+*/
+/*  
   preferences.begin("timeDifference", false);
-  int someNumberYes = preferences.getInt("elapsedSec", 999);
+  int someNumberYes = preferences.getInt("elapsedSec", 0);
   Serial.println(someNumberYes);
   preferences.clear();
   preferences.end();
-
+*/
   // Needs time to be initialized...
   LoadPrefCount();
 
   if(pref_count > MAX_LOCAL_STORAGE){
     isStorageFull = true;
   }
-  recentTimeCharacteristics->setValue("recentTimeChar");
-  recentTimeCharacteristics->notify(); 
-  delay(5000);
 }
 
 void loop() {
+  // Get current time
+  //time_t timeNow;
   struct tm timeinfo = getTimeStruct();
+
+  //time(&timeNow);
+  //localtime_r(&timeNow, &timeinfo);
  
   x_tilt = !digitalRead(x_sensor_pin); // 0x00200000
   y_tilt = !digitalRead(y_sensor_pin); // 0x00400000
@@ -667,7 +693,8 @@ void loop() {
   nx_tilt = digitalRead(nx_sensor_pin); // 0x4000
   ny_tilt = digitalRead(ny_sensor_pin); // 0x2000
   nz_tilt = digitalRead(nz_sensor_pin); // 0x0004   
-  
+
+  // Check sensors
   SensorCheck();
 
   /* Case 1 - Device is Connected and Storage is not Full*/
@@ -687,7 +714,7 @@ void loop() {
                                         timeinfo.tm_sec);
                                         
         // Convert to char array, used for later
-        translate.toCharArray(timestamp, 15);
+        translate.toCharArray(timestamp, translate.length() + 1);
         Serial.println("Start touch");
         Serial.println(timestamp);
 
@@ -712,12 +739,12 @@ void loop() {
 
         // convert to char array, save for later
         static char tempEndArr[20];
-        translate.toCharArray(tempEndArr, 15);
+        translate.toCharArray(tempEndArr, translate.length() + 1);
         tempEndData = tempEndArr;
 
         // Get cumulative hour, also saves elapsed time
         cumulativeHr = CalculateTimeElapsed(tempStartData, tempEndData);
-        currentETString.toCharArray(currentETCharArray, 7);
+        currentETString.toCharArray(currentETCharArray, currentETString.length() + 1);
 
         // Concatenate startTime and elapsedTime
         strcat(timestamp,currentETCharArray);
@@ -749,14 +776,18 @@ void loop() {
       // Getting data to send and clear
       preferences.begin(nameData, false);
       String timeString = preferences.getString("date","nodate");
+      preferences.end();
+      
       int timeStringLength = timeString.length() + 1;
       timeString.toCharArray(timeSent,timeStringLength);
 
       // Send data
       dateCharacteristics->setValue(timeSent);
       dateCharacteristics->notify();
+
+      // Clear specified storage
+      preferences.begin(nameData, false);
       preferences.clear();
-        
       preferences.end();
 
       Serial.println(nameData);
@@ -781,7 +812,7 @@ void loop() {
                                           timeinfo.tm_sec);
       char rtsChar[15];
       
-      recentTimeStamp.toCharArray(rtsChar, 15);
+      recentTimeStamp.toCharArray(rtsChar, recentTimeStamp.length() + 1);
       recentTimeCharacteristics->setValue(rtsChar);
       recentTimeCharacteristics->notify(); 
       firstConnection = false;
@@ -805,7 +836,7 @@ void loop() {
                                         timeinfo.tm_sec);
                                         
         // Convert to char array
-        translate.toCharArray(timestamp, 15);
+        translate.toCharArray(timestamp, translate.length() + 1);
 
         // Save tempStart so that we can calculate elapsedTime
         tempStartData = timestamp;
@@ -834,12 +865,12 @@ void loop() {
 
         // Conversion to char array
         static char tempEndArr[20];
-        translate.toCharArray(tempEndArr, 15);
+        translate.toCharArray(tempEndArr, translate.length() + 1);
         tempEndData = tempEndArr;
 
         // Get cumulative hour, also saves elapsed time
         cumulativeHr = CalculateTimeElapsed(tempStartData, tempEndData);
-        currentETString.toCharArray(currentETCharArray, 7);
+        currentETString.toCharArray(currentETCharArray, currentETString.length() + 1);
 
         // Concatenates startTime and elapsedTime
         strcat(timestamp,currentETCharArray);
@@ -860,6 +891,7 @@ void loop() {
         }
       }
     }
+    // Stop sending mostRecentTimeCharacteristic value
     if(!firstConnection){
       firstConnection = true; 
     }   
