@@ -20,7 +20,8 @@ All Strings Attached Program
  *  BLE2902 - ...
  *  
  */
- 
+#include <arduinoFFT.h>
+#include "driver/i2s.h"
 #include <sys/time.h>
 #include <Preferences.h>
 #include <BLEDevice.h>
