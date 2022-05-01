@@ -46,12 +46,12 @@
  *  Tilt Sensors usage based on pins
  *  
  */
-#define x_sensor_pin 0   //D2 
-#define nx_sensor_pin 25 //D6 
-#define y_sensor_pin 34  //D3
-#define ny_sensor_pin 35 //D7
-#define z_sensor_pin 26   //D5
-#define nz_sensor_pin 39  //D9
+#define x_sensor_pin 26   //D2
+#define nx_sensor_pin 25 //D3
+#define y_sensor_pin 34  //A3
+#define ny_sensor_pin 35 //A2
+#define z_sensor_pin 0   //D5
+#define nz_sensor_pin 39  //A1
 
 /* ------------------------------------------------------------------------------------------
  * DEFINE
@@ -143,21 +143,19 @@ int voltageSample = 0;
  *  Each variable depicts the state of the tilt sensors 
  *  
  */ 
+unsigned long long BUTTON_PIN_BITMASK = 0x2000; //2^0 + 2^13 + 2^14 in Hex
+int x_tilt = 0;
+int y_tilt = 0;
+int z_tilt = 0;
+int nx_tilt = 0;
+int ny_tilt = 0;
+int nz_tilt = 0;
 int x_lastState = 0;
 int y_lastState = 0;
 int z_lastState = 0;
 int nx_lastState = 0;
 int ny_lastState = 0;
 int nz_lastState = 0;
-uint32_t timePlayed = 0;
-unsigned long long BUTTON_PIN_BITMASK = 0x2000; //2^0 + 2^13 + 2^14 in Hex
-uint8_t sensor = 0;
-uint8_t x_tilt = 0;
-uint8_t y_tilt = 0;
-uint8_t z_tilt = 0;
-uint8_t nx_tilt = 0;
-uint8_t ny_tilt = 0;
-uint8_t nz_tilt = 0;
 
 /* ------------------------------------------------------------------------------------------
  * I2S Microphone
@@ -174,6 +172,7 @@ int32_t SampleData;
 uint8_t frequencyCount = 0;
 int bytes_read;
 bool StringPlaying = 0;
+bool StringPlayingBuff = 0;
 
 /* ------------------------------------------------------------------------------------------
  * Bluetooth States
@@ -202,7 +201,8 @@ touch_pad_t touchPin;
  */
 
 volatile int Interupt_Counter = 0;
-volatile int Microphone_Counter = 0;
+volatile int Microphone_Inactive = 0;
+volatile int Microphone_Active = 0;
 hw_timer_t* DeepSleepTimer = NULL;
 portMUX_TYPE DeepSleepTimerMux = portMUX_INITIALIZER_UNLOCKED;
 
@@ -259,7 +259,7 @@ void IRAM_ATTR onLEDTimer() {
   LEDInterruptCounter++;
 //--- Green light
 
-  if(LEDInterruptCounter == 3 || LEDInterruptCounter == 6 && !StringPlaying){
+  if(LEDInterruptCounter == 3 || LEDInterruptCounter == 6 && !StringPlayingBuff){
     digitalWrite(2,HIGH);
   } else if(!StringPlaying){
     digitalWrite(2,LOW);
@@ -267,7 +267,7 @@ void IRAM_ATTR onLEDTimer() {
 
 //--- Yellow light     
 
-  if(isStorageFull && LEDInterruptCounter == 3 || LEDInterruptCounter == 6 && !StringPlaying){
+  if(isStorageFull && LEDInterruptCounter == 3 || LEDInterruptCounter == 6 && !StringPlayingBuff){
     digitalWrite(13,HIGH);
   } else if(!StringPlaying){
     digitalWrite(13,LOW);
@@ -277,7 +277,7 @@ void IRAM_ATTR onLEDTimer() {
      */
     
 //--- Red light    
-  if(cumulativeHr >= 100 && LEDInterruptCounter == 3 || LEDInterruptCounter == 6 && !StringPlaying){
+  if(cumulativeHr >= 100 && LEDInterruptCounter == 3 || LEDInterruptCounter == 6 && !StringPlayingBuff){
      
     digitalWrite(14,HIGH);
     if(deviceConnected){                          //  This portion
@@ -288,19 +288,19 @@ void IRAM_ATTR onLEDTimer() {
     /*  
      * Red LED blinks
      */
-  } else if (!StringPlaying) {
+  } else if (!StringPlayingBuff) {
     digitalWrite(14,LOW);
   }
 
-  if (StringPlaying && LEDInterruptCounter == 2) {
+  if (StringPlayingBuff && LEDInterruptCounter == 2) {
       digitalWrite(2,HIGH);
       digitalWrite(13,LOW);
       digitalWrite(14,LOW);
-  } else if (StringPlaying && LEDInterruptCounter == 4) {
+  } else if (StringPlayingBuff && LEDInterruptCounter == 4) {
       digitalWrite(2,LOW);
       digitalWrite(13,HIGH);
       digitalWrite(14,LOW);
-  } else if (StringPlaying && LEDInterruptCounter == 6) {
+  } else if (StringPlayingBuff && LEDInterruptCounter == 6) {
       digitalWrite(2,LOW);
       digitalWrite(13,LOW);
       digitalWrite(14,HIGH);
@@ -332,6 +332,19 @@ void IRAM_ATTR onTransferTimer() {
 void IRAM_ATTR onDeepSleepTimer() {
   portENTER_CRITICAL_ISR(&DeepSleepTimerMux);
   Interupt_Counter++;
+  Microphone_Inactive++;
+
+  if(StringPlaying) {
+    Microphone_Active++;
+    Microphone_Inactive = 0;
+    if (Microphone_Active >= 1) {
+      StringPlayingBuff = 1;
+    }
+  } else if(Microphone_Inactive >= 15){
+    StringPlayingBuff = 0;
+  } else {
+    Microphone_Active = 0;
+  }
 //  Serial.println(String(Interupt_Counter));
   if (StringPlaying) {
     Interupt_Counter = 0;
@@ -352,7 +365,7 @@ void IRAM_ATTR onDeepSleepTimer() {
   arduinoFFT FFT = arduinoFFT();
 
  void micCheck(){
-  for (int i = 0; i < SAMPLES; i++)
+   for (int i = 0; i < SAMPLES; i++)
   {
     
     newTime = micros() - oldTime;
@@ -376,7 +389,7 @@ void IRAM_ATTR onDeepSleepTimer() {
 
   StringPlaying = 0;
   frequencyCount = 0;
-  for(int i = 0; i < SAMPLES; i++){  // Band pass filter
+  for(int i = 0; i < SAMPLES; i++){             // Band pass filter
       if(i < 2 || i >= 130){
         vReal[i] = 0;
       }
@@ -390,6 +403,8 @@ void IRAM_ATTR onDeepSleepTimer() {
         StringPlaying = 1;
       }
     }
+    // Serial.print(StringPlayingBuff);
+    // Serial.print("\t");
     // Serial.println(StringPlaying);
  }
  
@@ -399,7 +414,7 @@ void IRAM_ATTR onDeepSleepTimer() {
  * 
  */
 void SensorCheck() {
-  AllSensorsChecked = 0;
+   AllSensorsChecked = 0;
   SensorChanged = 0;
   do {
     if (x_tilt != x_lastState){
@@ -663,7 +678,7 @@ void ClearPrefCount(){
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("Big boi programming");
+  // Serial.println("Big boi programming");
 
   if (isDeviceSettedUp == false){
       struct tm timeinfo = getTimeStruct();
@@ -740,14 +755,13 @@ void setup() {
     pinMode(34,INPUT);
     pinMode(39,INPUT);
     pinMode(36,INPUT);
-    pinMode(15,INPUT);
-    
+
     x_tilt = digitalRead(x_sensor_pin); // 0x00200000
     y_tilt = analogRead(y_sensor_pin); // 0x00400000
     z_tilt = digitalRead(z_sensor_pin); // 0x0001
     nx_tilt = digitalRead(nx_sensor_pin); // 0x4000
     ny_tilt = analogRead(ny_sensor_pin); // 0x2000
-    nz_tilt = analogRead(nz_sensor_pin); // 0x0004   
+    nz_tilt = analogRead(nz_sensor_pin); // 0x0004 
 
 
     
@@ -764,8 +778,8 @@ void setup() {
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------------
  
   esp_err_t err;
-  
-  pinMode(12,OUTPUT);
+
+ pinMode(12,OUTPUT);
   pinMode(4,INPUT);
   pinMode(22,OUTPUT);
 
@@ -795,15 +809,15 @@ void setup() {
   // This function must be called before any I2S driver read/write operations.
   err = i2s_driver_install(I2S_PORT, &i2s_config, 0, NULL);
   if (err != ESP_OK) {
-    Serial.printf("Failed installing driver: %d\n", err);
+    // Serial.printf("Failed installing driver: %d\n", err);
     while (true);
   }
   err = i2s_set_pin(I2S_PORT, &pin_config);
   if (err != ESP_OK) {
-    Serial.printf("Failed setting pin: %d\n", err);
+    // Serial.printf("Failed setting pin: %d\n", err);
     while (true);
   }
-  Serial.println("I2S driver installed.");
+ // Serial.println("I2S driver installed.");
   
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------------
   for(int i = 1; i <= MAX_LOCAL_STORAGE; i++){
@@ -840,12 +854,12 @@ void setup() {
 void loop() {
   struct tm timeinfo = getTimeStruct();
 
-  x_tilt = digitalRead(x_sensor_pin); // 0x00200000
-  y_tilt = analogRead(y_sensor_pin); // 0x00400000
-  z_tilt = digitalRead(z_sensor_pin); // 0x0001
-  nx_tilt = digitalRead(nx_sensor_pin); // 0x4000
-  ny_tilt = analogRead(ny_sensor_pin); // 0x2000
-  nz_tilt = analogRead(nz_sensor_pin); // 0x0004   
+    x_tilt = digitalRead(x_sensor_pin); // 0x00200000
+    y_tilt = analogRead(y_sensor_pin); // 0x00400000
+    z_tilt = digitalRead(z_sensor_pin); // 0x0001
+    nx_tilt = digitalRead(nx_sensor_pin); // 0x4000
+    ny_tilt = analogRead(ny_sensor_pin); // 0x2000
+    nz_tilt = analogRead(nz_sensor_pin); // 0x0004  
   
   SensorCheck();
   micCheck();
@@ -855,7 +869,7 @@ void loop() {
   if (deviceConnected) {
     /* Get Start Time Stamp */
    
-      if(StringPlaying){
+      if(StringPlayingBuff){
         Serial.println("DeviceConnected :: Start Touch");
         isTouched = true;
 
@@ -879,7 +893,7 @@ void loop() {
 
     /* Get End Time, Compute Elapsed Time, Send startTime & elapsedTime */
   
-      if(!StringPlaying){
+      if(!StringPlayingBuff){
         isTouched = false;
         Serial.println("DeviceConnected :: End Touch");
         
@@ -973,7 +987,7 @@ void loop() {
   if(!deviceConnected && !isStorageFull){
     /* Get startTime */
 
-      if(StringPlaying){
+      if(StringPlayingBuff){
         
         Serial.println("!DeviceConnected :: Start Touch");
 
@@ -995,7 +1009,7 @@ void loop() {
 
     /* Get endTime*/
     
-      if(!StringPlaying){
+      if(!StringPlayingBuff){
       
         Serial.println("!DeviceConnected :: End Touch");
 
