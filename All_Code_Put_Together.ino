@@ -50,7 +50,7 @@ All Strings Attached Program
 #define nx_sensor_pin 25 //D3
 #define y_sensor_pin 34  //A3
 #define ny_sensor_pin 35 //A2
-#define z_sensor_pin 0   //D5
+#define z_sensor_pin 14  //D5
 #define nz_sensor_pin 39  //A1
 
 /* ------------------------------------------------------------------------------------------
@@ -113,7 +113,7 @@ static char currentETCharArray[7]; // 6 + \n
  *  isTransfer - checks to see if the transfer is complete
  */
 bool isTouched = false;
-bool isStorageFull = false; // most liekly set a limit of 5 start/end saves
+RTC_DATA_ATTR bool isStorageFull = false; // most liekly set a limit of 5 start/end saves
 RTC_DATA_ATTR bool isTransfer = false;
 
 
@@ -269,17 +269,17 @@ void IRAM_ATTR onLEDTimer() {
   LEDInterruptCounter++;
 //--- Green light
 
-  if(LEDInterruptCounter == 3 || LEDInterruptCounter == 6 && !StringPlayingBuff){
+  if((LEDInterruptCounter == 3 || LEDInterruptCounter == 6) && !StringPlayingBuff){
     digitalWrite(2,HIGH);
-  } else if(!StringPlaying){
+  } else if(!StringPlayingBuff){
     digitalWrite(2,LOW);
   }
 
 //--- Yellow light     
 
-  if(isStorageFull && LEDInterruptCounter == 3 || LEDInterruptCounter == 6 && !StringPlayingBuff){
+  if(isStorageFull && (LEDInterruptCounter == 3 || LEDInterruptCounter == 6) && !StringPlayingBuff){
     digitalWrite(13,HIGH);
-  } else if(!StringPlaying){
+  } else if(!StringPlayingBuff){
     digitalWrite(13,LOW);
   }
     /*
@@ -287,9 +287,9 @@ void IRAM_ATTR onLEDTimer() {
      */
     
 //--- Red light    
-  if(cumulativeHr >= 100 && LEDInterruptCounter == 3 || LEDInterruptCounter == 6 && !StringPlayingBuff){
+  if(cumulativeHr >= 100 && (LEDInterruptCounter == 3 || LEDInterruptCounter == 6) && !StringPlayingBuff){
      
-    digitalWrite(14,HIGH);
+    digitalWrite(0,HIGH);
     if(deviceConnected){                          //  This portion
       preferences.begin("timeDifference", false); //  requires the user to tell 
       preferences.clear();                        //  the device when strings
@@ -299,21 +299,21 @@ void IRAM_ATTR onLEDTimer() {
      * Red LED blinks
      */
   } else if (!StringPlayingBuff) {
-    digitalWrite(14,LOW);
+    digitalWrite(0,LOW);
   }
 
   if (StringPlayingBuff && LEDInterruptCounter == 2) {
       digitalWrite(2,HIGH);
       digitalWrite(13,LOW);
-      digitalWrite(14,LOW);
+      digitalWrite(0,LOW);
   } else if (StringPlayingBuff && LEDInterruptCounter == 4) {
       digitalWrite(2,LOW);
       digitalWrite(13,HIGH);
-      digitalWrite(14,LOW);
+      digitalWrite(0,LOW);
   } else if (StringPlayingBuff && LEDInterruptCounter == 6) {
       digitalWrite(2,LOW);
       digitalWrite(13,LOW);
-      digitalWrite(14,HIGH);
+      digitalWrite(0,HIGH);
   }
 
   if(LEDInterruptCounter == 6){
@@ -350,7 +350,7 @@ void IRAM_ATTR onDeepSleepTimer() {
     if (Microphone_Active >= 1) {
       StringPlayingBuff = 1;
     }
-  } else if(Microphone_Inactive >= 15){
+  } else if(Microphone_Inactive >= 60){
     StringPlayingBuff = 0;
   } else {
     Microphone_Active = 0;
@@ -359,7 +359,7 @@ void IRAM_ATTR onDeepSleepTimer() {
   if (StringPlaying) {
     Interupt_Counter = 0;
   }
-  else if (Interupt_Counter >= 60) {
+  else if (Interupt_Counter >= 300) {
 //      Serial.println("start deep sleep");
       
       esp_deep_sleep_start();
@@ -787,14 +787,14 @@ void setup() {
 
     pinMode(2, OUTPUT);
     pinMode(13, OUTPUT);
-    pinMode(14, OUTPUT);
+    pinMode(0, OUTPUT);
   
 // initialize sensors
 // ------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
     pinMode(25,INPUT);
     pinMode(26,INPUT);
-    pinMode(0,INPUT);
+    pinMode(14,INPUT);
     pinMode(35,INPUT);
     pinMode(34,INPUT);
     pinMode(39,INPUT);
@@ -823,7 +823,7 @@ void setup() {
  
   esp_err_t err;
 
- pinMode(12,OUTPUT);
+  pinMode(12,OUTPUT);
   pinMode(4,INPUT);
   pinMode(22,OUTPUT);
 
@@ -903,12 +903,12 @@ void loop() {
   //time(&timeNow);
   //localtime_r(&timeNow, &timeinfo);
  
-  x_tilt = !digitalRead(x_sensor_pin); // 0x00200000
-  y_tilt = !digitalRead(y_sensor_pin); // 0x00400000
-  z_tilt = !digitalRead(z_sensor_pin); // 0x0001
+  x_tilt = digitalRead(x_sensor_pin); // 0x00200000
+  y_tilt = analogRead(y_sensor_pin); // 0x00400000
+  z_tilt = digitalRead(z_sensor_pin); // 0x0001
   nx_tilt = digitalRead(nx_sensor_pin); // 0x4000
-  ny_tilt = digitalRead(ny_sensor_pin); // 0x2000
-  nz_tilt = digitalRead(nz_sensor_pin); // 0x0004   
+  ny_tilt = analogRead(ny_sensor_pin); // 0x2000
+  nz_tilt = analogRead(nz_sensor_pin); // 0x0004   
 
   // Check sensors
   SensorCheck();
