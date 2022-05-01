@@ -37,7 +37,7 @@ All Strings Attached Program
  *  
  */
 #define MAX_CHARS 15
-#define MAX_LOCAL_STORAGE 10
+#define MAX_LOCAL_STORAGE 50
 
 /* ------------------------------------------------------------------------------------------
  * DEFINE
@@ -176,10 +176,6 @@ touch_pad_t touchPin;
  * 
  */
 
-volatile int Interupt_Counter = 0;
-hw_timer_t* SleepTimer = NULL;
-portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
-
 volatile int LEDInterruptCounter;
 int totalLEDInterruptCounter;
 hw_timer_t* LEDTimer = NULL;
@@ -189,6 +185,15 @@ volatile int TransferInterruptCounter;
 int totalTransferInterruptCounter;
 hw_timer_t* TransferTimer = NULL;
 portMUX_TYPE TransferTimerMux = portMUX_INITIALIZER_UNLOCKED;
+
+volatile int Interupt_Counter = 0;
+hw_timer_t* SleepTimer = NULL;
+portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
+
+volatile int BLEInterruptCounter;
+int totalBLEInterruptCounter;
+hw_timer_t* BLETimer = NULL;
+portMUX_TYPE BLETimerMux = portMUX_INITIALIZER_UNLOCKED;
 
 /* ------------------------------------------------------------------------------------------
  * TimeStruct
@@ -212,13 +217,13 @@ struct tm getTimeStruct()
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
       deviceConnected = true;
-       BLEDevice::startAdvertising();
       firstConnection = true;
     };
 
     void onDisconnect(BLEServer* pServer) {
       deviceConnected = false;
       firstConnection = false;
+      pServer->startAdvertising();
     }
 };
 
@@ -288,14 +293,30 @@ void IRAM_ATTR onTransferTimer() {
 void IRAM_ATTR onDeepSleepTimer() {
   portENTER_CRITICAL_ISR(&timerMux);
   Interupt_Counter++;
-  Serial.println(String(Interupt_Counter));
+  // Serial.println(String(Interupt_Counter));
   if (Interupt_Counter >= 60) {
-      //Serial.println("start deep sleep");
+      // Serial.println("start deep sleep");
       esp_sleep_enable_ext1_wakeup(BUTTON_PIN_BITMASK,ESP_EXT1_WAKEUP_ANY_HIGH);
       esp_bt_controller_disable();
       esp_deep_sleep_start();
   }
   portEXIT_CRITICAL_ISR(&timerMux);
+}
+
+/* ------------------------------------------------------------------------------------------
+ * Interrupts - BLEConnect
+ *  Behaviors when we hit an interrupt
+ * 
+ */
+void IRAM_ATTR onBLETimer() {
+  portENTER_CRITICAL_ISR(&BLETimerMux);
+  BLEInterruptCounter++;
+  // Serial.println(String(BLEInterruptCounter));
+  if (deviceConnected && BLEInterruptCounter >= 50) {
+     // Serial.println("Auto-Disconnect");
+     pServer->disconnectClient();
+  }
+  portEXIT_CRITICAL_ISR(&BLETimerMux);
 }
 
 /* ------------------------------------------------------------------------------------------
@@ -605,11 +626,7 @@ void setup() {
   BLEAdvertising *pAdvertising = pServer->getAdvertising();
   pAdvertising->start();
 
-  // Start up multiple timer interrups
-  SleepTimer = timerBegin(2,80,true);
-  timerAttachInterrupt(SleepTimer, &onDeepSleepTimer, true);
-  timerAlarmWrite(SleepTimer,1000000,true);
- 
+  // Start up multiple timer interrupts
   LEDTimer = timerBegin(0, 80, true);
   timerAttachInterrupt(LEDTimer, &onLEDTimer, true);
   timerAlarmWrite(LEDTimer, 1000000, true);
@@ -619,6 +636,16 @@ void setup() {
   timerAttachInterrupt(TransferTimer, &onTransferTimer, true);
   timerAlarmWrite(TransferTimer, 50000, true);
   timerAlarmEnable(TransferTimer);
+
+  SleepTimer = timerBegin(2,80,true);
+  timerAttachInterrupt(SleepTimer, &onDeepSleepTimer, true);
+  timerAlarmWrite(SleepTimer,1000000,true);
+  //timerAlarmEnable(SleepTimer);
+
+  BLETimer = timerBegin(3,80,true);
+  timerAttachInterrupt(BLETimer, &onBLETimer, true);
+  timerAlarmWrite(BLETimer,1000000,true);
+  //timerAlarmEnable(BLETimer);
 
   // Set up deep sleep interrupt
   touchAttachInterrupt(T3, callback, Threshold);
@@ -699,8 +726,13 @@ void loop() {
 
   /* Case 1 - Device is Connected and Storage is not Full*/
   if (deviceConnected) {
+    timerAlarmEnable(BLETimer);
+    
     /* Get Start Time Stamp */
     if(touchRead(T3) < 60){
+      timerAlarmDisable(BLETimer);
+      BLEInterruptCounter = 0;
+      
       if(!isTouched){
         Serial.println("DeviceConnected :: Start Touch");
         isTouched = true;
@@ -725,6 +757,8 @@ void loop() {
 
     /* Get End Time, Compute Elapsed Time, Send startTime & elapsedTime */
     if(touchRead(T3) >= 66){
+      timerAlarmEnable(BLETimer);
+      
       if(isTouched){
         isTouched = false;
         Serial.println("DeviceConnected :: End Touch");
@@ -804,6 +838,7 @@ void loop() {
     }
     if(firstConnection){
       delay(100);
+      BLEInterruptCounter = 0;
       String recentTimeStamp = GetCurrentTMStamp(timeinfo.tm_year, 
                                           timeinfo.tm_mon, 
                                           timeinfo.tm_mday, 
@@ -821,6 +856,7 @@ void loop() {
 
   /* Case 2 - Device is not connected && Storage is not full*/
   if(!deviceConnected && !isStorageFull){
+    timerAlarmDisable(BLETimer);
     /* Get startTime */
     if(touchRead(T3) < 60){
       if(!isTouched){
