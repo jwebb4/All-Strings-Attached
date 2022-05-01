@@ -20,6 +20,7 @@ All Strings Attached Program
  *  BLE2902 - ...
  *  
  */
+
 #include <arduinoFFT.h>
 #include "driver/i2s.h"
 #include <sys/time.h>
@@ -203,6 +204,10 @@ bool SensorChanged = 0;
  *  Sleep
  * 
  */
+volatile int LEDInterruptCounter;
+int totalLEDInterruptCounter;
+hw_timer_t* LEDTimer = NULL;
+portMUX_TYPE LEDTimerMux = portMUX_INITIALIZER_UNLOCKED;
 
 volatile int Interupt_Counter = 0;
 volatile int Microphone_Inactive = 0;
@@ -214,12 +219,6 @@ volatile int TransferInterruptCounter;
 int totalTransferInterruptCounter;
 hw_timer_t* TransferTimer = NULL;
 portMUX_TYPE TransferTimerMux = portMUX_INITIALIZER_UNLOCKED;
-
-volatile int Interupt_Counter = 0;
-volatile int Microphone_Inactive = 0;
-volatile int Microphone_Active = 0;
-hw_timer_t* DeepSleepTimer = NULL;
-portMUX_TYPE DeepSleepTimerMux = portMUX_INITIALIZER_UNLOCKED;
 
 volatile int BLEInterruptCounter;
 int totalBLEInterruptCounter;
