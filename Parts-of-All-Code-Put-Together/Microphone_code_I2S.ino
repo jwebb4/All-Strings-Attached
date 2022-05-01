@@ -14,14 +14,54 @@ int32_t SampleData;
 uint8_t frequencyCount = 0;
 int bytes_read;
 bool StringPlaying = 0;
+bool StringPlayingBuff = 0;
 
 arduinoFFT FFT = arduinoFFT();
+
+volatile int Interupt_Counter = 0;
+volatile int Microphone_Inactive = 0;
+volatile int Microphone_Active = 0;
+hw_timer_t* DeepSleepTimer = NULL;
+portMUX_TYPE DeepSleepTimerMux = portMUX_INITIALIZER_UNLOCKED;
+
+void IRAM_ATTR onDeepSleepTimer() {
+  portENTER_CRITICAL_ISR(&DeepSleepTimerMux);
+  Interupt_Counter++;
+  Microphone_Inactive++;
+
+  if(StringPlaying) {
+    Microphone_Active++;
+    Microphone_Inactive = 0;
+    if (Microphone_Active >= 1) {
+      StringPlayingBuff = 1;
+    }
+  } else if(Microphone_Inactive >= 15){
+    StringPlayingBuff = 0;
+  } else {
+    Microphone_Active = 0;
+  }
+//  Serial.println(String(Interupt_Counter));
+  if (StringPlaying) {
+    Interupt_Counter = 0;
+  }
+  else if (Interupt_Counter >= 60) {
+//      Serial.println("start deep sleep");
+      
+      esp_deep_sleep_start();
+  }
+  portEXIT_CRITICAL_ISR(&DeepSleepTimerMux);
+}
 
 void setup() {
 
   
   Serial.begin(115200);
   esp_err_t err;
+
+  DeepSleepTimer = timerBegin(2,80,true);
+  timerAttachInterrupt(DeepSleepTimer, &onDeepSleepTimer, true);
+  timerAlarmWrite(DeepSleepTimer,1000000,true);
+  timerAlarmEnable(DeepSleepTimer);
   
   pinMode(12,OUTPUT);
   pinMode(4,INPUT);
@@ -104,5 +144,7 @@ void loop() {
         StringPlaying = 1;
       }
     }
+    Serial.print(StringPlayingBuff);
+    Serial.print("\t");
     Serial.println(StringPlaying);
   }
