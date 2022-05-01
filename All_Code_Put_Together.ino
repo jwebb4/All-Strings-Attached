@@ -924,7 +924,7 @@ void loop() {
       timerAlarmDisable(BLETimer);
       BLEInterruptCounter = 0;
       
-        Serial.println("DeviceConnected :: Start Touch");
+        // Serial.println("DeviceConnected :: Start Touch");
         // isTouched = true; ---
 
         // Get startTime
@@ -937,8 +937,8 @@ void loop() {
                                         
         // Convert to char array, used for later
         translate.toCharArray(timestamp, translate.length() + 1);
-         Serial.println("Start touch"); ---
-         Serial.println(timestamp); ---
+       //  Serial.println("Start touch"); ---
+       //  Serial.println(timestamp); ---
 
         // Save String tempStart so that we can calculate elapsedTime
         tempStartData = timestamp;
@@ -946,7 +946,7 @@ void loop() {
     }
 
     /* Get End Time, Compute Elapsed Time, Send startTime & elapsedTime */
-    if(!StingPlayedBuff){
+    if(!StringPlayingBuff){
       timerAlarmEnable(BLETimer);
       
         // isTouched = false; ---
@@ -1013,7 +1013,7 @@ void loop() {
       preferences.clear();
       preferences.end();
 
-      Serial.println(nameData);
+      // Serial.println(nameData);
       
       currentLoopCount++;
 
@@ -1047,7 +1047,7 @@ void loop() {
   if(!deviceConnected && !isStorageFull){
     timerAlarmDisable(BLETimer);
     /* Get startTime */
-    if(StringPlayedBuff){
+    if(StringPlayingBuff){
         // isTouched = true; ---
         // Serial.println("!DeviceConnected :: Start Touch"); ---
 
@@ -1068,7 +1068,7 @@ void loop() {
     }
 
     /* Get endTime*/
-    if(!StringPlayedBuff){
+    if(!StringPlayingBuff){
       
         // isTouched = false; ---
         // Serial.println("!DeviceConnected :: End Touch"); ---
