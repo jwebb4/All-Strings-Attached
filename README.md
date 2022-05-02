@@ -11,6 +11,15 @@ Fall 2021 - Spring 2022: Carlos Rosales-Moran, Kimberly Tse, Joshua Webb
 Determine the lifespan of strings on a string instrument
 - First Iteration (Fall 2021-Spring 2022): Data Collection, provide foundation of mobile applicaiton
 
+## Resources
+**Mobile Application**
+- ReactNative
+- Expo Simulator (for debugging purposes)
+
+**Microcontroller Programming**
+- ArduinoIDE
+- Special thanks to Neil Kolban for providing BLE libraries for the ESP32: Check out his repository: https://github.com/nkolban
+
 ## How to Use
 Have the following in hand - we'll provide the documentation of how to set up
 - Firebeetle IoT ESP32
