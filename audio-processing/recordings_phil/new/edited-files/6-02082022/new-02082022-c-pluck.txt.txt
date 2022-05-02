@@ -1,0 +1,20 @@
+instrument_type violin
+instrument_size 4/4
+num_strings_hold 5
+pitch c3
+frequency 130.8
+string_core spiral
+string_winding na
+string_brand thomastik
+string_brand_version 
+string_gauge na
+string_gauge_value na
+total_practice_time na
+date_manufactured na
+date_string_placed 02082022
+time_since_string_placed
+has_capo 0
+playing_style orchestral
+percentage_other na
+percentage_fingers na
+sound_type pizz
