@@ -1,0 +1,213 @@
+<?xml version="1.0" standalone="no" ?>
+<!DOCTYPE project PUBLIC "-//audacityproject-1.3.0//DTD//EN" "http://audacity.sourceforge.net/xml/audacityproject-1.3.0.dtd" >
+<project xmlns="http://audacity.sourceforge.net/xml/" projname="new-01162022-iPhone_data" version="1.3.0" audacityversion="2.4.2" sel0="0.0000000000" sel1="15.7589375000" vpos="912" h="0.0000000000" zoom="34.0124309392" rate="48000.0" snapto="off" selectionformat="hh:mm:ss + milliseconds" frequencyformat="Hz" bandwidthformat="octaves">
+	<tags>
+		<tag name="TITLE" value="2021-01-16 string test iPhone"/>
+	</tags>
+	<wavetrack name="new-01162022-iPhone" isSelected="0" height="150" minimized="0" channel="2" linked="0" mute="0" solo="0" rate="48000" gain="1.0" pan="0.0" colorindex="0">
+		<waveclip offset="0.00000000" colorindex="0">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="2886005">
+				<waveblock start="0">
+					<simpleblockfile filename="e08083bd.au" len="140474" min="-0.801259" max="0.647905" rms="0.156917"/>
+				</waveblock>
+				<waveblock start="140474">
+					<simpleblockfile filename="e080860a.au" len="140475" min="-0.579507" max="0.542495" rms="0.168975"/>
+				</waveblock>
+				<waveblock start="280949">
+					<simpleblockfile filename="e080857a.au" len="262144" min="-0.703653" max="0.758419" rms="0.142269"/>
+				</waveblock>
+				<waveblock start="543093">
+					<simpleblockfile filename="e0808987.au" len="262144" min="-0.626959" max="0.526325" rms="0.124267"/>
+				</waveblock>
+				<waveblock start="805237">
+					<simpleblockfile filename="e08080b5.au" len="262144" min="-0.505745" max="0.617284" rms="0.148718"/>
+				</waveblock>
+				<waveblock start="1067381">
+					<simpleblockfile filename="e0808141.au" len="262144" min="-0.546777" max="0.60893" rms="0.138118"/>
+				</waveblock>
+				<waveblock start="1329525">
+					<simpleblockfile filename="e0808515.au" len="262144" min="-0.416258" max="0.663739" rms="0.097451"/>
+				</waveblock>
+				<waveblock start="1591669">
+					<simpleblockfile filename="e08089f3.au" len="262144" min="-0.534924" max="0.597911" rms="0.122358"/>
+				</waveblock>
+				<waveblock start="1853813">
+					<simpleblockfile filename="e0808ffb.au" len="262144" min="-0.461515" max="0.501161" rms="0.12946"/>
+				</waveblock>
+				<waveblock start="2115957">
+					<simpleblockfile filename="e08086f5.au" len="262144" min="-0.541294" max="0.557131" rms="0.098166"/>
+				</waveblock>
+				<waveblock start="2378101">
+					<simpleblockfile filename="e08089f0.au" len="262144" min="-0.367465" max="0.373559" rms="0.1214"/>
+				</waveblock>
+				<waveblock start="2640245">
+					<simpleblockfile filename="e08087ef.au" len="245760" min="-0.277279" max="0.289986" rms="0.051396"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<wavetrack name="new-01162022-iPhone-c" isSelected="0" height="151" minimized="0" channel="2" linked="0" mute="0" solo="0" rate="48000" gain="1.0" pan="0.0" colorindex="0">
+		<waveclip offset="0.00000000" colorindex="0">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="413496">
+				<waveblock start="0">
+					<simpleblockfile filename="e080852f.au" len="227926" min="-0.922589" max="0.856415" rms="0.210578"/>
+				</waveblock>
+				<waveblock start="227926">
+					<simpleblockfile filename="e0808b87.au" len="185570" min="-0.287538" max="0.269245" rms="0.038214"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<wavetrack name="new-01162022-iPhone-g" isSelected="0" height="150" minimized="0" channel="2" linked="0" mute="0" solo="0" rate="48000" gain="1.0" pan="0.0" colorindex="0">
+		<waveclip offset="0.00000000" colorindex="0">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="379626">
+				<waveblock start="0">
+					<simpleblockfile filename="e0808ab2.au" len="169359" min="-0.905985" max="0.72423" rms="0.154043"/>
+				</waveblock>
+				<waveblock start="169359">
+					<simpleblockfile filename="e080891f.au" len="169359" min="-0.225448" max="0.215316" rms="0.035914"/>
+				</waveblock>
+				<waveblock start="338718">
+					<simpleblockfile filename="e0808a7f.au" len="40908" min="-0.00588" max="0.005416" rms="0.001666"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<wavetrack name="new-01162022-iPhone-d" isSelected="0" height="150" minimized="0" channel="2" linked="0" mute="0" solo="0" rate="48000" gain="1.0" pan="0.0" colorindex="0">
+		<waveclip offset="0.00000000" colorindex="0">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="379626">
+				<waveblock start="0">
+					<simpleblockfile filename="e0808721.au" len="221236" min="-0.636682" max="0.814864" rms="0.164388"/>
+				</waveblock>
+				<waveblock start="221236">
+					<simpleblockfile filename="e08082d0.au" len="158390" min="-0.029131" max="0.029917" rms="0.0094"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<wavetrack name="new-01162022-iPhone-a" isSelected="0" height="150" minimized="0" channel="2" linked="0" mute="0" solo="0" rate="48000" gain="1.0" pan="0.0" colorindex="0">
+		<waveclip offset="0.00000000" colorindex="0">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="379626">
+				<waveblock start="0">
+					<simpleblockfile filename="e080876e.au" len="182949" min="-0.641357" max="0.797594" rms="0.170085"/>
+				</waveblock>
+				<waveblock start="182949">
+					<simpleblockfile filename="e0808563.au" len="182949" min="-0.194552" max="0.192828" rms="0.036154"/>
+				</waveblock>
+				<waveblock start="365898">
+					<simpleblockfile filename="e08087ae.au" len="13728" min="-0.00457" max="0.00433" rms="0.001361"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<wavetrack name="new-01162022-iPhone-e" isSelected="0" height="150" minimized="0" channel="2" linked="0" mute="0" solo="0" rate="48000" gain="1.0" pan="0.0" colorindex="0">
+		<waveclip offset="0.00000000" colorindex="0">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="379626">
+				<waveblock start="0">
+					<simpleblockfile filename="e080858f.au" len="248416" min="-0.670356" max="0.574415" rms="0.13493"/>
+				</waveblock>
+				<waveblock start="248416">
+					<simpleblockfile filename="e08089ea.au" len="131210" min="-0.003612" max="0.003058" rms="0.000832"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<wavetrack name="new-01162022-iPhone-c-pluck" isSelected="0" height="150" minimized="0" channel="2" linked="0" mute="0" solo="0" rate="48000" gain="1.0" pan="0.0" colorindex="0">
+		<waveclip offset="0.00000000" colorindex="0">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="756429">
+				<waveblock start="0">
+					<simpleblockfile filename="e080860b.au" len="196539" min="-0.129742" max="0.116087" rms="0.015799"/>
+				</waveblock>
+				<waveblock start="196539">
+					<simpleblockfile filename="e080848b.au" len="196539" min="-0.021522" max="0.02151" rms="0.002486"/>
+				</waveblock>
+				<waveblock start="393078">
+					<simpleblockfile filename="e08082db.au" len="262144" min="-0.222357" max="0.254748" rms="0.033716"/>
+				</waveblock>
+				<waveblock start="655222">
+					<simpleblockfile filename="e0808d00.au" len="101207" min="-0.007633" max="0.008726" rms="0.002039"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<wavetrack name="new-01162022-iPhone-g-pluck" isSelected="0" height="150" minimized="0" channel="2" linked="0" mute="0" solo="0" rate="48000" gain="1.0" pan="0.0" colorindex="0">
+		<waveclip offset="0.00000000" colorindex="0">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="756429">
+				<waveblock start="0">
+					<simpleblockfile filename="e08089e5.au" len="160937" min="-0.922092" max="0.931043" rms="0.056549"/>
+				</waveblock>
+				<waveblock start="160937">
+					<simpleblockfile filename="e0808e8f.au" len="262144" min="-0.025442" max="0.017546" rms="0.003431"/>
+				</waveblock>
+				<waveblock start="423081">
+					<simpleblockfile filename="e0808d5d.au" len="262144" min="-0.73394" max="0.691417" rms="0.033564"/>
+				</waveblock>
+				<waveblock start="685225">
+					<simpleblockfile filename="e08081fb.au" len="71204" min="-0.007902" max="0.008162" rms="0.002022"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<wavetrack name="new-01162022-iPhone-d-pluck" isSelected="0" height="150" minimized="0" channel="2" linked="0" mute="0" solo="0" rate="48000" gain="1.0" pan="0.0" colorindex="0">
+		<waveclip offset="0.00000000" colorindex="0">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="756429">
+				<waveblock start="0">
+					<simpleblockfile filename="e08080c0.au" len="190940" min="-0.9486" max="0.872316" rms="0.103985"/>
+				</waveblock>
+				<waveblock start="190940">
+					<simpleblockfile filename="e08085db.au" len="262144" min="-0.920654" max="0.865003" rms="0.072208"/>
+				</waveblock>
+				<waveblock start="453084">
+					<simpleblockfile filename="e080884c.au" len="262144" min="-0.332428" max="0.341248" rms="0.055982"/>
+				</waveblock>
+				<waveblock start="715228">
+					<simpleblockfile filename="e0808d58.au" len="41201" min="-0.008604" max="0.007515" rms="0.002152"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<wavetrack name="new-01162022-iPhone-a-pluck" isSelected="0" height="150" minimized="0" channel="2" linked="0" mute="0" solo="0" rate="48000" gain="1.0" pan="0.0" colorindex="0">
+		<waveclip offset="0.00000000" colorindex="0">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="756429">
+				<waveblock start="0">
+					<simpleblockfile filename="e0808ae0.au" len="220943" min="-0.918076" max="0.895189" rms="0.069153"/>
+				</waveblock>
+				<waveblock start="220943">
+					<simpleblockfile filename="e080891e.au" len="262144" min="-0.944976" max="0.872061" rms="0.065381"/>
+				</waveblock>
+				<waveblock start="483087">
+					<simpleblockfile filename="e080824c.au" len="262144" min="-0.118448" max="0.099995" rms="0.011172"/>
+				</waveblock>
+				<waveblock start="745231">
+					<simpleblockfile filename="e080864a.au" len="11198" min="-0.005885" max="0.005904" rms="0.001919"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+	<wavetrack name="new-01162022-iPhone-e-pluck" isSelected="1" height="150" minimized="0" channel="2" linked="0" mute="0" solo="0" rate="48000" gain="1.0" pan="0.0" colorindex="0">
+		<waveclip offset="0.00000000" colorindex="0">
+			<sequence maxsamples="262144" sampleformat="262159" numsamples="756429">
+				<waveblock start="0">
+					<simpleblockfile filename="e080863b.au" len="250946" min="-0.733194" max="0.783753" rms="0.044562"/>
+				</waveblock>
+				<waveblock start="250946">
+					<simpleblockfile filename="e0808a3b.au" len="262144" min="-0.894031" max="0.901925" rms="0.040691"/>
+				</waveblock>
+				<waveblock start="513090">
+					<simpleblockfile filename="e0808d37.au" len="243339" min="-0.042821" max="0.038297" rms="0.005834"/>
+				</waveblock>
+			</sequence>
+			<envelope numpoints="0"/>
+		</waveclip>
+	</wavetrack>
+</project>
