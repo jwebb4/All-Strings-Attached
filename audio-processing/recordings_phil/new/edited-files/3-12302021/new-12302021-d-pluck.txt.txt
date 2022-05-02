@@ -1,0 +1,20 @@
+instrument_type violin
+instrument_size 4/4
+num_strings_hold 5
+pitch d4
+frequency 293.7
+string_core steel
+string_winding na
+string_brand daddario
+string_brand_version helicore
+string_gauge medium
+string_gauge_value 12.2
+total_practice_time na
+date_manufactured na
+date_string_placed 12302021
+time_since_string_placed
+has_capo 0
+playing_style orchestral
+percentage_other na
+percentage_fingers na
+sound_type pizz
