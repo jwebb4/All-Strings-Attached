@@ -286,7 +286,10 @@ void IRAM_ATTR onLEDTimer() {
      * Yellow LED code to blink
      */
     
-//--- Red light    
+//--- Red light  
+  if(SampledVoltage <= 1.8){
+    digitalWrite(0,HIGH); 
+  }
   if(cumulativeHr >= 100 && (LEDInterruptCounter == 3 || LEDInterruptCounter == 6) && !StringPlayingBuff){
      
     digitalWrite(0,HIGH);
@@ -305,15 +308,21 @@ void IRAM_ATTR onLEDTimer() {
   if (StringPlayingBuff && LEDInterruptCounter == 2) {
       digitalWrite(2,HIGH);
       digitalWrite(13,LOW);
-      digitalWrite(0,LOW);
+      if(SampledVoltage > 1.8){
+        digitalWrite(0,LOW); 
+      }
   } else if (StringPlayingBuff && LEDInterruptCounter == 4) {
       digitalWrite(2,LOW);
       digitalWrite(13,HIGH);
-      digitalWrite(0,LOW);
+      if(SampledVoltage > 1.8){
+        digitalWrite(0,LOW); 
+      }
   } else if (StringPlayingBuff && LEDInterruptCounter == 6) {
       digitalWrite(2,LOW);
       digitalWrite(13,LOW);
-      digitalWrite(0,HIGH);
+      if(SampledVoltage > 1.8){
+        digitalWrite(0,HIGH); 
+      }
   }
 
   if(LEDInterruptCounter == 6){
@@ -350,7 +359,7 @@ void IRAM_ATTR onDeepSleepTimer() {
     if (Microphone_Active >= 1) {
       StringPlayingBuff = 1;
     }
-  } else if(Microphone_Inactive >= 60){
+  } else if(Microphone_Inactive >= 30){
     StringPlayingBuff = 0;
   } else {
     Microphone_Active = 0;
