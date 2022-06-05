@@ -161,6 +161,7 @@ int nz_lastState = 0;
  */
 const i2s_port_t I2S_PORT = I2S_NUM_0;
 double vReal[SAMPLES];
+double vRealMax;
 double vImag[SAMPLES];
 double StoredData[SAMPLES];
 unsigned long newTime, oldTime;
@@ -286,11 +287,8 @@ void IRAM_ATTR onLEDTimer() {
      * Yellow LED code to blink
      */
     
-//--- Red light  
-  if(SampledVoltage <= 1.65){
-    digitalWrite(0,HIGH); 
-  }
-  if(cumulativeHr >= 100 && (LEDInterruptCounter == 3 || LEDInterruptCounter == 6) && !StringPlayingBuff){
+//--- Red light    
+  if(cumulativeHr >= 100 && (LEDInterruptCounter == 3 || LEDInterruptCounter == 6) && !StringPlayingBuff && SampledVoltage >= 1.7){
      
     digitalWrite(0,HIGH);
     if(deviceConnected){                          //  This portion
@@ -301,28 +299,30 @@ void IRAM_ATTR onLEDTimer() {
     /*  
      * Red LED blinks
      */
-  } else if (!StringPlayingBuff) {
+  }  else if (!StringPlayingBuff) {
+    digitalWrite(0,LOW);
+  }
+  
+  if(SampledVoltage < 1.7 && (LEDInterruptCounter == 3 || LEDInterruptCounter == 6) && !StringPlayingBuff){
+    digitalWrite(0,HIGH);
+  } else if(!StringPlayingBuff){
     digitalWrite(0,LOW);
   }
 
+//--- String Playing   
+  
   if (StringPlayingBuff && LEDInterruptCounter == 2) {
       digitalWrite(2,HIGH);
       digitalWrite(13,LOW);
-      if(SampledVoltage > 1.8){
-        digitalWrite(0,LOW); 
-      }
+      digitalWrite(0,LOW);
   } else if (StringPlayingBuff && LEDInterruptCounter == 4) {
       digitalWrite(2,LOW);
       digitalWrite(13,HIGH);
-      if(SampledVoltage > 1.8){
-        digitalWrite(0,LOW); 
-      }
+      digitalWrite(0,LOW);
   } else if (StringPlayingBuff && LEDInterruptCounter == 6) {
       digitalWrite(2,LOW);
       digitalWrite(13,LOW);
-      if(SampledVoltage > 1.8){
-        digitalWrite(0,HIGH); 
-      }
+      digitalWrite(0,HIGH);
   }
 
   if(LEDInterruptCounter == 6){
@@ -330,6 +330,7 @@ void IRAM_ATTR onLEDTimer() {
   }
   portEXIT_CRITICAL_ISR(&LEDTimerMux);
 }
+
 /* ------------------------------
  * 
  */
@@ -358,7 +359,7 @@ void IRAM_ATTR onDeepSleepTimer() {
     if (Microphone_Active >= 1) {
       StringPlayingBuff = 1;
     }
-  } else if(Microphone_Inactive >= 30){
+  } else if(Microphone_Inactive >= 60){
     StringPlayingBuff = 0;
   } else {
     Microphone_Active = 0;
@@ -370,7 +371,7 @@ void IRAM_ATTR onDeepSleepTimer() {
   else if (Interupt_Counter >= 300) {
 //      Serial.println("start deep sleep");
       
-      esp_deep_sleep_start();
+       esp_deep_sleep_start(); // just for video
   }
   portEXIT_CRITICAL_ISR(&DeepSleepTimerMux);
 }
@@ -383,8 +384,8 @@ void IRAM_ATTR onDeepSleepTimer() {
 void IRAM_ATTR onBLETimer() {
   portENTER_CRITICAL_ISR(&BLETimerMux);
   BLEInterruptCounter++;
-  // Serial.println("BLE COUNT: "+ String(BLEInterruptCounter));
-  if (deviceConnected && BLEInterruptCounter >= 300) {
+  // Serial.println(String(BLEInterruptCounter));
+  if (deviceConnected && BLEInterruptCounter >= 50) {
      // Serial.println("Auto-Disconnect");
      pServer->disconnectClient();
   }
@@ -424,14 +425,18 @@ void IRAM_ATTR onBLETimer() {
 
   StringPlaying = 0;
   frequencyCount = 0;
+  vRealMax = 0;
   for(int i = 0; i < SAMPLES; i++){             // Band pass filter
       if(i < 2 || i >= 130){
         vReal[i] = 0;
       }
-      if(vReal[i] < 50000000){
+      else if(vReal[i] < 50000000){
         vReal[i] = 0;
       }
-      if (vReal[i] != 0 && vReal[i+2] < vReal[i] * .26) {
+      if (vReal [i] > vRealMax && i >=2 && i < 130) {
+          vRealMax = vReal[i];
+        }
+      if (vReal[i] != 0 && vReal[i+2] < vRealMax * .26) {// was .26
         frequencyCount++;
       }
       if(frequencyCount > 5) {
@@ -697,133 +702,6 @@ int CalculateTimeElapsed(String tStart, String tEnd){
   
 }
 
-/* Minus5SecBuffer
- *  Minus 5 seconds after stopped sound and get accurate reading
- *  
- */
-
-String Minus5SecBuffer(int yearTM, int monthTM, int dayTM, 
- int hourTM, int minTM, int secTM){
-  String fYear = "";
-  String fMonth = "";
-  String fDay = "";
-  String fHr = "";
-  String fMin = "";
-  String fSec = "";
-
-  yearTM += 1900;
-  monthTM += 1;
-
-  int carryMin = 0;
-  int carryHr = 0;
-  int carryDay = 0;
-  int carryMonth = 0;
-  int carryYear = 0;
-
-  // Determining current elapsed time
-  if(secTM - 15 < 0){
-    secTM = 60 - (5 - secTM);
-    carryMin = 1;
-  } else{
-    secTM = secTM - 15;
-  }
-  if((minTM - carryMin )< 0){
-    minTM = 60 - carryMin + minTM;
-    carryHr = 1;
-  } else{
-    minTM = minTM - carryMin;
-  }
-  if((hourTM - carryHr) < 0){
-    hourTM = 24 - carryHr + hourTM;
-    carryDay = 1;
-  } else{
-    hourTM = hourTM - carryHr;
-  }
-  if((dayTM - carryDay) < 0){
-    dayTM = 30 - carryDay + dayTM; // placeholder
-    carryDay = 1;
-  } else{
-    dayTM = dayTM - carryDay;
-  }
-  if((monthTM - carryMonth) < 0){
-    monthTM = 12 - carryMonth + monthTM;
-    carryYear = 1;
-  } else{
-    monthTM = monthTM - carryMonth;
-  }
-  yearTM = yearTM - carryYear;
-
-  switch(monthTM){
-    case 1:
-      dayTM = 31;
-      break;
-    case 2:
-      dayTM = 28;
-      break;
-    case 3:
-      dayTM = 31;
-      break;
-    case 4:
-      dayTM = 30;
-      break;
-    case 5:
-      dayTM = 31;
-      break;
-    case 6:
-      dayTM = 30;
-      break;
-    case 7:
-      dayTM = 31;
-      break;
-    case 8:
-      dayTM = 31;
-      break;
-    case 9:
-      dayTM = 30;
-      break;
-    case 10:
-      dayTM = 31;
-      break;
-    case 11:
-      dayTM = 30;
-      break;
-    case 12:
-      dayTM = 31;
-      break;
-  }
-  
-  
-  fYear = String(yearTM);
-  if(monthTM < 10 ){
-    fMonth = "0" + String(monthTM);
-  } else {
-    fMonth = String(monthTM);
-  }
-  if(dayTM < 10){
-    fDay = "0" + String(dayTM);
-  } else{
-    fDay = String(dayTM);  
-  }
-  if(hourTM < 10){
-    fHr = "0" + String(hourTM);
-  } else{
-    fHr = String(hourTM);  
-  }
-  if(minTM < 10){
-    fMin = "0" + String(minTM);
-  } else{
-    fMin = String(minTM);  
-  }
-  if(secTM < 10){
-    fSec = "0" + String(secTM);
-  } else{
-    fSec = String(secTM);  
-  }
-
-  return fYear + fMonth + fDay + fHr + fMin + fSec;  
-
-}
-
 /*  Load/Increment/ClearPrefCount
  *   Allows us to manipuate the current count of data -1 saved in
  *   storage
@@ -1055,14 +933,13 @@ void loop() {
     timerAlarmEnable(BLETimer);
     
     /* Get Start Time Stamp */
-    if(StringPlayingBuff){     
+    if(StringPlayingBuff && !isOn){
+      isOn = true;
+      
       timerAlarmDisable(BLETimer);
       BLEInterruptCounter = 0;
       
-      if(!isOn){
-        isOn = true;
-        
-        // Serial.println("DeviceConnected :: Start Touch");
+        Serial.println("DeviceConnected :: Start Touch");
         // isTouched = true; ---
 
         // Get startTime
@@ -1075,24 +952,22 @@ void loop() {
                                         
         // Convert to char array, used for later
         translate.toCharArray(timestamp, translate.length() + 1);
-        // Serial.print("Start touch:");
-        // Serial.println(timestamp);
+       //  Serial.println("Start touch"); ---
+       //  Serial.println(timestamp); ---
 
         // Save String tempStart so that we can calculate elapsedTime
         tempStartData = timestamp;
-
-      }
       
     }
-    
 
     /* Get End Time, Compute Elapsed Time, Send startTime & elapsedTime */
-    if(!StringPlayingBuff){
+    if(!StringPlayingBuff && isOn){
+      isOn = false;
+      
       timerAlarmEnable(BLETimer);
-      if(isOn){
-        isOn = false;
+      
         // isTouched = false; ---
-        // Serial.println("DeviceConnected :: End Touch");
+        Serial.println("DeviceConnected :: End Touch");
         
         // Get endTime
         translate = GetCurrentTMStamp(timeinfo.tm_year, 
@@ -1101,16 +976,6 @@ void loop() {
                                           timeinfo.tm_hour,
                                           timeinfo.tm_min,
                                           timeinfo.tm_sec);
-                                          
-        // Serial.println("Before transit: " + translate);
-        
-        translate = Minus5SecBuffer(timeinfo.tm_year, 
-                                          timeinfo.tm_mon, 
-                                          timeinfo.tm_mday, 
-                                          timeinfo.tm_hour,
-                                          timeinfo.tm_min,
-                                          timeinfo.tm_sec);
-        
 
         // convert to char array, save for later
         static char tempEndArr[20];
@@ -1131,8 +996,8 @@ void loop() {
         // Send data to mobile application
         dateCharacteristics->setValue(timestamp);
         dateCharacteristics->notify();
-        
-      }
+
+      
     }
     
     /* Sending data, clearing data*/
@@ -1165,7 +1030,7 @@ void loop() {
       preferences.clear();
       preferences.end();
 
-      Serial.println(nameData);
+      // Serial.println(nameData);
       
       currentLoopCount++;
 
@@ -1199,8 +1064,7 @@ void loop() {
   if(!deviceConnected && !isStorageFull){
     timerAlarmDisable(BLETimer);
     /* Get startTime */
-    if(StringPlayingBuff){
-      if(!isOn){
+    if(StringPlayingBuff && !isOn){
         isOn = true;
         // isTouched = true; ---
         Serial.println("!DeviceConnected :: Start Touch");
@@ -1212,24 +1076,21 @@ void loop() {
                                         timeinfo.tm_hour,
                                         timeinfo.tm_min,
                                         timeinfo.tm_sec);
-        
                                         
         // Convert to char array
         translate.toCharArray(timestamp, translate.length() + 1);
 
         // Save tempStart so that we can calculate elapsedTime
         tempStartData = timestamp;
-        
-      }
+      
     }
 
     /* Get endTime*/
-    if(!StringPlayingBuff){
-      if(isOn){
-         isOn = false;
+    if(!StringPlayingBuff && isOn){
+        isOn = false;
       
         // isTouched = false; ---
-        // Serial.println("!DeviceConnected :: End Touch");
+        Serial.println("!DeviceConnected :: End Touch");
 
         // Creating datastorage for startTime, elapsedTime
         String namingStorage = baseNameDataSpace + String(pref_count);
@@ -1245,13 +1106,6 @@ void loop() {
                                           timeinfo.tm_min,
                                           timeinfo.tm_sec);
 
-        translate = Minus5SecBuffer(timeinfo.tm_year, 
-                                          timeinfo.tm_mon, 
-                                          timeinfo.tm_mday, 
-                                          timeinfo.tm_hour,
-                                          timeinfo.tm_min,
-                                          timeinfo.tm_sec);
-        
         // Conversion to char array
         static char tempEndArr[20];
         translate.toCharArray(tempEndArr, translate.length() + 1);
@@ -1272,15 +1126,13 @@ void loop() {
         IncrementPrefCount();
 
         // Serial.println(nameData);
-        // Serial.println(timestamp); 
-
+        // Serial.println(timestamp);
+        
         //Serial.println("Count: " + String(pref_count));
         if(pref_count > MAX_LOCAL_STORAGE){
           isStorageFull = true;
         
-        }
       }
-      
     }
     // Stop sending mostRecentTimeCharacteristic value
     if(!firstConnection){
