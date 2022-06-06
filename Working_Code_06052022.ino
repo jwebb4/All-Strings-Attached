@@ -256,6 +256,7 @@ class MyServerCallbacks: public BLEServerCallbacks {
       Serial.println("Disconnected!");
       deviceConnected = false;
       firstConnection = false;
+      BLEInterruptCounter = 0;
       pServer->startAdvertising();
     }
 };
@@ -386,10 +387,12 @@ void IRAM_ATTR onDeepSleepTimer() {
  */
 void IRAM_ATTR onBLETimer() {
   portENTER_CRITICAL_ISR(&BLETimerMux);
-  BLEInterruptCounter++;
-  // Serial.println(String(BLEInterruptCounter));
+  if(isOn == false){
+    BLEInterruptCounter++;
+  }
+  Serial.println(String(BLEInterruptCounter));
   if (deviceConnected && BLEInterruptCounter >= 50) {
-     // Serial.println("Auto-Disconnect");
+     Serial.println("Auto-Disconnect");
      pServer->disconnectClient();
   }
   portEXIT_CRITICAL_ISR(&BLETimerMux);
@@ -967,6 +970,7 @@ void loop() {
     /* Get End Time, Compute Elapsed Time, Send startTime & elapsedTime */
     if(!StringPlayingBuff && isOn){
       isOn = false;    
+
         // isTouched = false; ---
         Serial.println("Connected - End");
         
