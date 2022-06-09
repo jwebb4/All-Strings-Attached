@@ -115,6 +115,7 @@ static char currentETCharArray[7]; // 6 + \n
 bool isOn = false;
 RTC_DATA_ATTR bool isStorageFull = false; // most liekly set a limit of 5 start/end saves
 RTC_DATA_ATTR bool isTransfer = false;
+RTC_DATA_ATTR int bootCount = 0; // 
 
 
 /* ------------------------------------------------------------------------------------------
@@ -368,11 +369,11 @@ void IRAM_ATTR onDeepSleepTimer() {
   } else {
     Microphone_Active = 0;
   }
-//  Serial.println(String(Interupt_Counter));
+  // Serial.println("InactiveCount: " + String(Interupt_Counter));
   if (StringPlaying) {
     Interupt_Counter = 0;
   }
-  else if (Interupt_Counter >= 300) {
+  else if (Interupt_Counter >= 15) {
 //      Serial.println("start deep sleep");
       
        esp_deep_sleep_start(); // just for video
@@ -743,13 +744,18 @@ void setup() {
   
 
   // Set up timing for microcontroller if powered off before
-  struct timeval tv;
-  tv.tv_sec =   21600;  // enter UTC UNIX time (get it from https://www.unixtimestamp.com )
-  settimeofday(&tv, NULL);
+  if(!bootCount){
+    struct timeval tv;
+    tv.tv_sec = 0;  // enter UTC UNIX time (get it from https://www.unixtimestamp.com )
+    settimeofday(&tv, NULL);
+  
+    // Set timezone to Epoch Central time
+    // setenv("TZ", "CST+6CDT,M3.2.0/2,M11.1.0/2", 1); // https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
+    tzset();
+  }
+  
 
-  // Set timezone to Epoch Central time
-  setenv("TZ", "CST+6CDT,M3.2.0/2,M11.1.0/2", 1); // https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
-  tzset();
+  ++bootCount;
 
   // Create BLE server name & callbacks
   BLEDevice::init(bleServerName);
