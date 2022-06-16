@@ -373,7 +373,7 @@ void IRAM_ATTR onDeepSleepTimer() {
   if (StringPlaying) {
     Interupt_Counter = 0;
   }
-  else if (Interupt_Counter >= 15) {
+  else if (Interupt_Counter >= 300) {
 //      Serial.println("start deep sleep");
       
        esp_deep_sleep_start(); // just for video
@@ -754,7 +754,6 @@ void setup() {
     tzset();
   }
   
-
   ++bootCount;
 
   // Create BLE server name & callbacks
@@ -1055,7 +1054,7 @@ void loop() {
 
     /* Connecting after disconnect  */
     if(firstConnection){
-      delay(50);
+      delay(1000);
       BLEInterruptCounter = 0;
       String recentTimeStamp = GetCurrentTMStamp(timeinfo.tm_year, 
                                           timeinfo.tm_mon, 
@@ -1068,7 +1067,7 @@ void loop() {
       recentTimeStamp.toCharArray(rtsChar, recentTimeStamp.length() + 1);
       recentTimeCharacteristics->setValue(rtsChar);
       recentTimeCharacteristics->notify(); 
-      Serial.println(rtsChar);
+      Serial.println("Most Recent Time: " + String(rtsChar));
       firstConnection = false;
       
     }
